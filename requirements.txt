@@ -1,0 +1,4 @@
+numpy>=1.22
+
+# Official backend: SHAP's KernelExplainer
+shap>=0.44
