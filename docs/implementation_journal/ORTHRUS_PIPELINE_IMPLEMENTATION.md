@@ -16,6 +16,8 @@ Nel secondo step è stato aggiunto `adapters/orthrus_runtime.py`: un layer di ca
 
 L'audit successivo del checkout `external/orthrus` ha permesso di aggiungere una via ufficiale: usa la configurazione ORTHRUS, ricostruisce `full_data` insieme ai tre split, carica il checkpoint completo e prepara un batch con il loader temporale originale.
 
+Per rendere questa via utilizzabile senza scrivere codice ad hoc è stato aggiunto un template JSON con placeholder e un launcher CLI minimale. Il launcher traduce il JSON in `OrthrusOfficialRuntimeConfig`, esegue lo smoke test e stampa il risultato essenziale.
+
 ## Scelte architetturali
 
 Il modello viene creato fuori dall'adapter perché configurazione, classi ORTHRUS e checkpoint dipendono dall'ambiente reale. L'adapter resta il confine stabile fra Kernel SHAP e ORTHRUS: accetta un `OrthrusAlertCase` e chiama esattamente `model(batch, full_data, inference=True)`.
@@ -36,6 +38,8 @@ Sono stati aggiunti test con modello fake per chiamata e argomenti, media delle 
 
 Per il runtime sono stati aggiunti test su import senza ORTHRUS, availability report, errori per checkout e path mancanti, loader failure contestualizzati e percorso completo con loader fake. I test della via ufficiale verificano cfg, caricamento dataset e checkpoint, costruzione modello, factory dei batch, selezione degli indici, risultato ed errori principali. Il percorso attraversa davvero `OrthrusAlertCase` e `RealOrthrusAnoAdapter`.
 
+La CLI è testata senza artifact reali: i test verificano lettura e validazione JSON, costruzione della dataclass, chiamata al runtime sostituita con un fake, riepilogo stampato ed errori chiari per file assente o JSON malformato.
+
 ## Cosa non è ancora implementato
 
 Le API ufficiali sono identificate e integrate, ma non sono ancora state eseguite con artifact reali. Restano la verifica del caricamento effettivo di `.TemporalData.simple` e `model_epoch_N`, della coerenza fra stato del neighbor loader, `e_id` e `full_data`, del device reale e infine l'orchestrazione end-to-end in `pipeline.py`.
@@ -53,3 +57,4 @@ Le API ufficiali sono identificate e integrate, ma non sono ancora state eseguit
 - 2026-08-11: implementato il core di `RealOrthrusAnoAdapter` con model injection, chiamata di inferenza, validazione delle loss e riduzione media; aggiunti test fake e Torch opzionale.
 - 2026-08-12: aggiunto il runtime ORTHRUS con import dinamico, controlli di disponibilità, caricamento configurabile e smoke test non perturbato; `pipeline.py` resta volutamente stub per Kernel SHAP ORTHRUS.
 - 2026-08-12: l'audit del checkout ufficiale ha confermato la firma dell'adapter e l'output per-edge. Il runtime è stato esteso con una via ufficiale basata su `cfg`, `load_all_datasets`, `build_model`, `load_model` e `batch_loader_factory`. `full_data` viene ricostruito dai tre split; il checkpoint `model_epoch_N` ripristina sia `state_dict.pkl` sia `neighbor_loader.pkl`. Lo step copre una sola inferenza non perturbata: restano il test con artifact reali, la verifica temporale/device e Kernel SHAP end-to-end.
+- 2026-08-12: aggiunti il template `examples/orthrus_official_smoke_config.example.json` e la CLI `scripts/run_orthrus_official_smoke.py`. Rendono ripetibile il primo smoke test reale senza includere dataset o checkpoint nel repository. La CLI esegue ancora soltanto un batch non perturbato; con gli artifact disponibili restano da validare caricamento, stato temporale, `e_id/full_data` e device prima dell'integrazione Kernel SHAP.

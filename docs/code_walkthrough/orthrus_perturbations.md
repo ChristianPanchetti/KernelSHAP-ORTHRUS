@@ -26,7 +26,7 @@ Entrambe le strategie sono implementate e testate sinteticamente. I test Torch d
 
 ## Limiti e TODO
 
-Neutralizzare non elimina l'edge: il modello vede ancora endpoints, tempo e tipo di relazione, quindi la componente conserva informazione strutturale. Non è ancora dimostrato che azzerare tutti e quattro i campi corrisponda alla baseline semantica corretta del modello reale. Anche alcuni commenti interni a `drop_edges` lo descrivono come sicuro per ORTHRUS, affermazione superata dalla cautela su `e_id/full_data`. Servono test con adapter fake stateful e poi replay reale controllato.
+Neutralizzare non elimina l'edge: il modello vede ancora endpoints, tempo e tipo di relazione, quindi la componente conserva informazione strutturale. Non è ancora dimostrato che azzerare tutti e quattro i campi corrisponda alla baseline semantica corretta del modello reale. Servono lo smoke test non perturbato con artifact reali e, successivamente, una verifica controllata della neutralizzazione con stato temporale ed `e_id` reali.
 
 ## File collegati
 

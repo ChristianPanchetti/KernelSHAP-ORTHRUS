@@ -261,19 +261,23 @@ Implemented:
 - orthrus_join_keys utilities;
 - synthetic tests for mapping and perturbation;
 - sidecar generation and validation.
+- RealOrthrusAnoAdapter core with injected model and `mean(edge_losses)` reduction;
+- generic ORTHRUS runtime and unperturbed smoke-test path;
+- official cfg-driven ORTHRUS runtime using `load_all_datasets`, `build_model`, `load_model`, and `batch_loader_factory`;
+- official smoke-test CLI in `scripts/run_orthrus_official_smoke.py`;
+- versionable config template in `examples/orthrus_official_smoke_config.example.json`.
 
 Partially implemented or scaffolded:
 
 - OrthrusAlertCaseLoader (artifact loading implemented, real ORTHRUS artifact compatibility not yet validated);
-- RealOrthrusAnoAdapter (core inference/reduction implemented via injected model; checkpoint/model construction not implemented);
+- official runtime compatibility with real ORTHRUS artifacts (implemented but not yet exercised on real artifacts);
 - ORTHRUS end-to-end mode;
 - db-assisted real mapping.
 
 Not yet implemented:
 
 - real DARPA E3/E5 integration;
-- real TemporalData artifact loading test;
-- real ORTHRUS checkpoint inference;
+- smoke test with real TemporalData and a complete `model_epoch_N` checkpoint;
 - full_data/e_id compatibility validation;
 - end-to-end Kernel SHAP on ORTHRUS;
 - final analyst-facing export.
@@ -284,13 +288,11 @@ The current priority is to move toward real ORTHRUS inference.
 
 Preferred next steps:
 
-1. audit the current repo state;
-2. check whether interrupted sidecar-generator changes created incomplete or inconsistent files;
-3. inspect ORTHRUS inference requirements;
-4. understand required TemporalData fields, `full_data`, `e_id`, and neighbor loader behavior;
-5. integrate model/checkpoint construction around the implemented RealOrthrusAnoAdapter core;
-6. test with real ORTHRUS TemporalData artifact;
-7. connect Kernel SHAP to ORTHRUS mode.
+1. obtain or generate the real `.TemporalData.simple` artifacts;
+2. obtain a complete `model_epoch_N` containing `state_dict.pkl` and `neighbor_loader.pkl`;
+3. run the official smoke-test CLI first on CPU;
+4. validate `full_data`, `e_id`, neighbor-loader state, and device behavior;
+5. connect Kernel SHAP to ORTHRUS mode only after real inference is validated.
 
 Avoid implementing extra alternatives until the real ORTHRUS inference path works.
 

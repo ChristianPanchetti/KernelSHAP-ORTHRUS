@@ -28,11 +28,11 @@ La separazione evita di confondere la rappresentazione semplificata usata per ve
 
 ## Stato attuale
 
-La pipeline dummy e i componenti ORTHRUS strutturali sono coperti da test. La suite corrente non richiede DARPA, Postgres o checkpoint. `RealOrthrusAnoAdapter` e l'orchestrazione ORTHRUS restano incompleti.
+La pipeline dummy e i componenti ORTHRUS sono coperti da test. La suite corrente non richiede DARPA, Postgres o checkpoint. Il core di `RealOrthrusAnoAdapter`, il runtime ufficiale e la CLI dello smoke test sono implementati; resta incompleta l'orchestrazione Kernel SHAP ORTHRUS end-to-end.
 
 ## Limiti e TODO
 
-La documentazione descrive il codice corrente, inclusi alcuni docstring sorgente ormai datati. Dovrà essere aggiornata quando saranno definiti il checkpoint, il caricamento di `full_data`, il replay temporale e il contratto esatto degli edge loss.
+Mancano ancora il primo smoke test con artifact reali e la validazione pratica di checkpoint, `full_data`, `e_id`, stato temporale e device. Dopo tale verifica si potrà collegare il runtime alla pipeline Kernel SHAP ORTHRUS.
 
 ## File collegati
 

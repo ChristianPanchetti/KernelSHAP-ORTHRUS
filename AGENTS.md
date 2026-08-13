@@ -49,11 +49,11 @@ Prefer this order:
 
 1. Audit existing code before modifying it.
 2. Keep existing tests passing.
-3. Move toward real ORTHRUS `TemporalData` loading and inference.
-4. Implement the minimal `RealOrthrusAnoAdapter`.
-5. Test with fake/mocked ORTHRUS model first.
-6. Then test with real ORTHRUS artifacts.
-7. Improve mapping/export only after inference works.
+3. Obtain or generate real ORTHRUS artifacts.
+4. Run the official unperturbed smoke test on real `TemporalData` and a complete checkpoint.
+5. Validate `full_data`, global `e_id`, neighbor-loader state, and device behavior.
+6. Connect the validated runtime to the ORTHRUS Kernel SHAP path.
+7. Improve mapping/export only after real inference works.
 
 Do not prioritize:
 - extra mapping strategies;
@@ -105,7 +105,7 @@ Be careful with:
 
 Never assume that perturbing the local batch is enough until compatibility with `full_data` and `e_id` has been checked.
 
-`RealOrthrusAnoAdapter` is still the next missing integration block. Test it first with a fake/mocked ORTHRUS model and reduce per-edge losses with `mean(edge_losses)`.
+`RealOrthrusAnoAdapter`, the generic runtime, the official cfg-driven runtime, and the smoke-test CLI are implemented and synthetically tested. The next practical block is obtaining or generating real ORTHRUS artifacts and running the official unperturbed smoke test. Kernel SHAP end-to-end in ORTHRUS mode is still future work.
 
 ## Sidecar and mapping
 

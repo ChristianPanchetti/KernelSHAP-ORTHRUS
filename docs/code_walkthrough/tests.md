@@ -6,7 +6,7 @@ La suite protegge la pipeline dummy e verifica i componenti ORTHRUS senza richie
 
 ## Posizione nella pipeline
 
-I test seguono i livelli del sistema: normalizzazione e componenti, perturbazioni, adapter, SHAP, CLI, mapping, sidecar e scaffolding ORTHRUS. `tests/conftest.py` fornisce path della fixture, root del progetto e helper CLI/JSON.
+I test seguono i livelli del sistema: normalizzazione e componenti, perturbazioni, adapter, SHAP, CLI, mapping, sidecar e runtime ORTHRUS. `tests/conftest.py` fornisce path della fixture, root del progetto e helper CLI/JSON.
 
 ## Come funziona
 
@@ -20,24 +20,27 @@ I test dummy principali sono:
 
 I test ORTHRUS sintetici sono:
 
-- `test_orthrus_scaffolding.py`, che controlla import senza Torch, separazione dei tipi e fallimento esplicito di adapter/pipeline stub;
+- `test_orthrus_scaffolding.py`, che controlla import senza Torch, separazione dei tipi e fallimento esplicito della modalità ORTHRUS ancora stub in `pipeline.py`;
 - `test_orthrus_perturbation.py`, che usa `FakeTemporalData` per verificare drop, ricostruzione di `edge_index` e neutralizzazione;
 - `test_orthrus_mapping.py` e `test_orthrus_mapping_sidecar.py`, che coprono artifact-only, descrizioni, loader pickle, sidecar e join DB in memoria;
-- `test_orthrus_sidecar_generator.py`, che copre generazione, caricamento, validazione, fallback e warning.
+- `test_orthrus_sidecar_generator.py`, che copre generazione, caricamento, validazione, fallback e warning;
+- `test_real_orthrus_adapter.py`, che verifica chiamata al modello, riduzione media, device, eval e validazione delle loss;
+- `test_orthrus_runtime.py` e `test_orthrus_official_runtime.py`, che coprono runtime generico e flusso ufficiale con moduli fake;
+- `test_orthrus_official_smoke_script.py`, che verifica configurazione JSON, invocazione della CLI e messaggi d'errore.
 
 Il test che conserva dtype e device usa `pytest.importorskip("torch")`. Se Torch non è installato viene saltato, perché Torch è una dipendenza opzionale e non appartiene ai requirements base.
 
 ## Perché è stato progettato così
 
-Oggetti sintetici rendono i test rapidi, riproducibili e utilizzabili in qualunque ambiente. Il fallimento esplicito della modalità ORTHRUS è oggi comportamento atteso: evita di scambiare uno scaffold per inferenza reale.
+Oggetti sintetici rendono i test rapidi, riproducibili e utilizzabili in qualunque ambiente. Il fallimento esplicito della modalità ORTHRUS in `pipeline.py` è ancora atteso, mentre adapter, runtime e CLI dello smoke test sono testati come componenti operativi separati.
 
 ## Stato attuale
 
-La suite copre bene la pipeline dummy e i contratti strutturali ORTHRUS. Non misura la correttezza scientifica dello score dummy né la compatibilità con un checkpoint.
+La suite copre la pipeline dummy, il core dell'adapter, le perturbazioni e l'orchestrazione del runtime ORTHRUS con fake. Non misura la correttezza scientifica dello score dummy né la compatibilità con artifact e checkpoint reali.
 
 ## Limiti e TODO
 
-Servono test del `RealOrthrusAnoAdapter` con modello fake e loss note, validazione di `mean(edge_losses)`, casi senza edge, propagazione di device/errori e compatibilità `full_data/e_id`. In seguito serviranno smoke test locali, separati e opzionali, con `TemporalData`, configurazione e checkpoint reali, senza inserirli nella suite portabile o nel repository.
+Serve il primo smoke test locale, separato e opzionale, con `TemporalData`, configurazione e checkpoint reali, senza inserirli nella suite portabile o nel repository. In seguito andranno verificate compatibilità `full_data/e_id`, stato del neighbor loader, device e neutralizzazione prima del Kernel SHAP ORTHRUS end-to-end.
 
 ## File collegati
 

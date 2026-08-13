@@ -28,7 +28,7 @@ Dummy e placeholder sono operativi. Anche il core finale del real adapter è imp
 
 ## Limiti e TODO
 
-Mancano costruzione del modello, caricamento del checkpoint e configurazione, loader/replay temporale, gestione reale di neighbor state ed `e_id` e smoke test con artifact. Il core assume che `case.temporal_data` sia già il batch accettato dal modello e che l'output diretto della chiamata sia il vettore delle loss, non una tupla o un dizionario.
+Costruzione del modello, configurazione, caricamento del checkpoint completo e preparazione del batch sono implementati nel runtime ufficiale, non nell'adapter. Mancano ancora lo smoke test con artifact reali e la validazione pratica di neighbor state ed `e_id`. Il core assume che `case.temporal_data` sia già il batch accettato dal modello e che l'output diretto sia il vettore delle loss, non una tupla o un dizionario.
 
 ## File collegati
 

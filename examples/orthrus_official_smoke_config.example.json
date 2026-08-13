@@ -1,0 +1,12 @@
+{
+  "external_root": "external/orthrus",
+  "config_path": "external/orthrus/config/orthrus.yml",
+  "dataset_name": "REPLACE_WITH_ORTHRUS_DATASET_NAME",
+  "model_epoch_dir": "artifacts/REPLACE_WITH_MODEL_PATH/model_epoch_N",
+  "split": "test",
+  "graph_index": 0,
+  "batch_index": 0,
+  "device": "cpu",
+  "from_weights_path": null,
+  "overrides": {}
+}

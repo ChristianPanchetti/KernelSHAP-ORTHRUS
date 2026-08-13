@@ -20,7 +20,7 @@ Kernel SHAP lavora su vettori di presenza/assenza, mentre ORTHRUS lavora su edge
 
 ## Stato attuale
 
-Le quattro modalità sono implementate e verificate indirettamente dai test ORTHRUS di mapping e perturbazione. Il docstring sorgente che definisce ancora il builder “stub” è obsoleto rispetto al comportamento reale.
+Le quattro modalità sono implementate e verificate con dati sintetici. Il builder non è uno stub: costruisce e valida concretamente `component_to_edges` per il caso ORTHRUS.
 
 ## Limiti e TODO
 

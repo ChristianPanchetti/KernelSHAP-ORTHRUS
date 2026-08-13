@@ -7,7 +7,7 @@ Framework di explainability basato su Kernel SHAP per il modulo di anomaly detec
 Il repository contiene due percorsi distinti:
 
 - **Dummy/debug:** pipeline end-to-end funzionante basata su `LogDataset`, `DummyOrthrusAnoAdapter` e `shap.KernelExplainer`. Serve per test, sanity check e regressione; non riproduce il comportamento di ORTHRUS-ano.
-- **ORTHRUS reale:** integrazione ancora incompleta. Il percorso finale userà artifact ORTHRUS `TemporalData`, non `LogDataset`. Il core di `RealOrthrusAnoAdapter` è implementato per un modello già costruito; caricamento del checkpoint e modalità `orthrus` di `pipeline.py` sono ancora futuri.
+- **ORTHRUS reale:** integrazione ancora incompleta. Il percorso finale usa artifact ORTHRUS `TemporalData`, non `LogDataset`. Il core di `RealOrthrusAnoAdapter`, il runtime generico, il runtime ufficiale cfg-driven e la CLI dello smoke test sono implementati. La modalità `orthrus` Kernel SHAP di `pipeline.py` resta futura.
 
 Sono già implementati e testati con dati sintetici:
 
@@ -16,11 +16,21 @@ Sono già implementati e testati con dati sintetici:
 - `OrthrusPerturbationManager`;
 - `ArtifactOnlyMappingProvider`, `SidecarMappingProvider` e matching DB offline;
 - generazione e validazione dei sidecar.
-- runtime configurabile e smoke test non perturbato per modello/artifact esterni.
+- runtime generico e runtime ufficiale cfg-driven con smoke test non perturbato;
+- caricamento ufficiale di directory `model_epoch_N` complete di `state_dict.pkl` e `neighbor_loader.pkl`;
+- CLI e configurazione di esempio per avviare lo smoke test ufficiale.
 
-Non sono ancora disponibili inferenza con checkpoint ORTHRUS reale, validazione con artifact DARPA reali ed esecuzione Kernel SHAP end-to-end in modalità ORTHRUS.
+Il percorso di inferenza è implementato, ma non è ancora stato eseguito con checkpoint e artifact ORTHRUS reali. Restano inoltre la validazione con artifact DARPA reali e Kernel SHAP end-to-end in modalità ORTHRUS.
 
 Il modulo `adapters/orthrus_runtime.py` prepara il percorso di inferenza reale senza importare ORTHRUS o Torch all'avvio del progetto. Richiede path locali a checkpoint, `TemporalData` e `full_data`, più una factory del modello esterna. `run_unperturbed_smoke_test(...)` esegue una sola inferenza senza perturbazioni e restituisce score e cardinalità; non è ancora la pipeline SHAP ORTHRUS.
+
+Il percorso aderente alla repository ufficiale si può avviare copiando e compilando `examples/orthrus_official_smoke_config.example.json`, quindi eseguendo:
+
+```bash
+python scripts/run_orthrus_official_smoke.py path/to/smoke_config.json
+```
+
+Servono gli artifact `.TemporalData.simple` nei path calcolati da ORTHRUS e una directory `model_epoch_N` contenente `state_dict.pkl` e `neighbor_loader.pkl`. Dataset, checkpoint e artifact DARPA sono locali e non devono essere committati. Il comando esegue un solo batch non perturbato: non avvia ancora Kernel SHAP.
 
 ## Pipeline
 
@@ -70,7 +80,7 @@ python main.py --mode dummy --adapter dummy \
 
 È possibile aggiungere `--output-csv outputs/kernel_shap_ranking.csv`. La directory `outputs/` è mantenuta nella struttura, ma i risultati e i log generati sono ignorati da Git.
 
-La modalità seguente è intenzionalmente non funzionante finché l'adapter reale non sarà implementato:
+La modalità seguente è intenzionalmente non funzionante perché l'orchestrazione Kernel SHAP ORTHRUS in `pipeline.py` non è ancora implementata; l'adapter e lo smoke test ufficiale sono invece disponibili separatamente:
 
 ```bash
 python main.py --mode orthrus --adapter real --input artifact.pt --output outputs/result.json
@@ -101,7 +111,7 @@ I sidecar generati sono ignorati per default e non sono necessari per l'inferenz
 
 ## Dipendenza ORTHRUS esterna
 
-La directory `external/orthrus/` **non è inclusa**. Il codice ORTHRUS-ano, i dataset DARPA, Postgres, gli artifact e i checkpoint devono essere gestiti esternamente e non committati. Dettagli in [docs/ORTHRUS_INTEGRATION.md](docs/ORTHRUS_INTEGRATION.md).
+La directory `external/orthrus/` può essere presente localmente, ed è attualmente usata dal runtime ufficiale, ma è ignorata da Git e non fa parte del contenuto versionato. Dataset DARPA, Postgres, artifact e checkpoint restano locali e non devono essere committati. Dettagli in [docs/ORTHRUS_INTEGRATION.md](docs/ORTHRUS_INTEGRATION.md).
 
 ## Struttura essenziale
 

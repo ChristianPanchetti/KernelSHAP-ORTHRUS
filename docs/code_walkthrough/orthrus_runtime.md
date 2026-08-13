@@ -26,10 +26,12 @@ Il runtime generico presupponeva file separati per batch e `full_data`, mentre O
 
 Configurazione, import lazy, caricamento cfg/dataset, selezione split-grafo-batch, costruzione modello, caricamento checkpoint completo, pesi opzionali e chiamata all'adapter sono implementati. Il risultato include score, cardinalità, dataset, split, indici, device e warning.
 
+Per l'uso manuale, `scripts/run_orthrus_official_smoke.py` legge il template JSON in `examples/`, costruisce `OrthrusOfficialRuntimeConfig`, richiama il runtime e presenta un riepilogo compatto. Gli import del runtime restano lazy, quindi leggere o testare la CLI non richiede Torch/PyG.
+
 ## Limiti e TODO
 
 Mancano il primo smoke test con artifact reali, la validazione su GPU, le perturbazioni nel runtime e Kernel SHAP end-to-end. `from_weights_path` non sostituisce lo stato del neighbor loader. Il loader YAML ufficiale non supporta un file arbitrario: `config_path` deve essere il suo `config/orthrus.yml`.
 
 ## File collegati
 
-`adapters/orthrus_runtime.py`, `adapters/orthrus_ano_adapter.py`, `preprocessing/orthrus_alert_case.py`, `external/orthrus/src/data_utils.py`, `external/orthrus/src/factory.py` e `docs/ORTHRUS_INTEGRATION.md`.
+`adapters/orthrus_runtime.py`, `scripts/run_orthrus_official_smoke.py`, `examples/orthrus_official_smoke_config.example.json`, `adapters/orthrus_ano_adapter.py`, `preprocessing/orthrus_alert_case.py`, `external/orthrus/src/data_utils.py`, `external/orthrus/src/factory.py` e `docs/ORTHRUS_INTEGRATION.md`.

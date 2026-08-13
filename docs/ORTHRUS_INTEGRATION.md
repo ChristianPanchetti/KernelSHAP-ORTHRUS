@@ -49,3 +49,15 @@ Poiché ORTHRUS definisce la radice degli artifact come `./artifacts`, la funzio
 Lo smoke test è non perturbato e non esegue Kernel SHAP. Non implementa replay manuale del `LastNeighborLoader`, mapping reale, Postgres o la modalità ORTHRUS di `pipeline.py`. Prima del test reale servono artifact preprocessati compatibili e una directory `model_epoch_N` completa; dataset, checkpoint, sidecar e output non vanno committati.
 
 Il precedente `OrthrusRuntimeConfig` resta disponibile per compatibilità, ma rappresenta un percorso generico basato su artifact autonomi e non il contratto ufficiale ORTHRUS.
+
+## Avvio da configurazione JSON
+
+Il file `examples/orthrus_official_smoke_config.example.json` è un modello versionabile privo di path personali e dati sensibili. Va copiato in un file locale e compilato con dataset e directory del checkpoint reali. `from_weights_path` può restare `null`; `overrides` può restare vuoto oppure contenere chiavi dotted accettate dalla CLI ORTHRUS.
+
+Lo smoke test si avvia dalla root del progetto con:
+
+```bash
+python scripts/run_orthrus_official_smoke.py path/to/smoke_config.json
+```
+
+Lo script stampa score, numero di edge e loss, dataset, split, indice del batch, device e warning. Errori di JSON, path, dipendenze o artifact vengono riportati con un messaggio contestualizzato. Il file di configurazione reale può contenere path infrastrutturali e non va necessariamente committato; il template `.example.json` è invece sicuro da mantenere nel repository.

@@ -22,11 +22,11 @@ La diramazione precoce impedisce di passare per errore un `LogDataset` al modell
 
 ## Stato attuale
 
-Entrypoint, configurazione, logging e pipeline dummy sono operativi. La CLI espone ancora opzioni di grouping e perturbazione proprie del percorso dummy; non rappresenta ancora una CLI completa per artifact ORTHRUS. Il futuro `RealOrthrusAnoAdapter` dovrà essere costruito qui con modello, checkpoint e contesto necessari.
+Entrypoint, configurazione, logging e pipeline dummy sono operativi. La CLI principale espone ancora opzioni proprie del percorso dummy e non orchestra Kernel SHAP su artifact ORTHRUS. Separatamente, `scripts/run_orthrus_official_smoke.py` costruisce il runtime ufficiale, carica modello, checkpoint e contesto e invoca il `RealOrthrusAnoAdapter` già implementato su un batch non perturbato.
 
 ## Limiti e TODO
 
-Occorre definire gli argomenti ORTHRUS, caricare `temporal_data` e `full_data`, costruire componenti e perturbazioni native e adattare il contratto dell'explainer. La modalità reale non deve riutilizzare `LogDataset`: la pipeline finale usa `TemporalData`.
+Occorre ancora collegare alla modalità `orthrus` di `pipeline.py` il runtime validato, la costruzione delle componenti, la neutralizzazione e il contratto dell'explainer. Prima va eseguito lo smoke test con artifact reali. La modalità reale non deve riutilizzare `LogDataset`: la pipeline finale usa `TemporalData`.
 
 ## File collegati
 
