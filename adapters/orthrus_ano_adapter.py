@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import abc
-from contextlib import nullcontext
+import copy
+from contextlib import contextmanager, nullcontext
 import logging
 import math
 import numbers
@@ -59,6 +60,11 @@ class RealOrthrusAnoAdapter(OrthrusAnoAdapter):
     adapter validates an `OrthrusAlertCase`, invokes the injected model as
     `model(batch, full_data, inference=True)`, validates its per-edge losses,
     and reduces them to the scalar score required by Kernel SHAP.
+
+    isolate_state=True captures the pre-batch ORTHRUS state at construction.
+    Every score then restores that same snapshot before and after inference.
+    Construct only after loading/warming the model and placing it on its device.
+    This mode supports serial evaluations of the audited non-contrastive model.
     """
 
     def __init__(
@@ -68,6 +74,7 @@ class RealOrthrusAnoAdapter(OrthrusAnoAdapter):
         score_reduction: str = "mean",
         require_eval_mode: bool = True,
         logger: Optional[logging.Logger] = None,
+        isolate_state: bool = False,
     ):
         if model is None:
             raise ValueError("RealOrthrusAnoAdapter requires an already constructed model")
@@ -79,6 +86,20 @@ class RealOrthrusAnoAdapter(OrthrusAnoAdapter):
         self.score_reduction = "mean"
         self.require_eval_mode = bool(require_eval_mode)
         self._logger = logger or logging.getLogger(__name__)
+        if isolate_state and not require_eval_mode:
+            raise ValueError("State-isolated evaluations require eval mode")
+        self._state_snapshot = _OrthrusStateSnapshot(model) if isolate_state else None
+
+    def score_mask(self, perturbation, mask: Sequence[int]) -> float:
+        """Original case -> current-batch neutralization -> isolated scalar score.
+
+        Reuse one manager and adapter for all masks. No SHAP dependency.
+        """
+        if self._state_snapshot is None:
+            raise ValueError("score_mask requires isolate_state=True")
+        if perturbation.mode != "neutralize_edges":
+            raise ValueError("score_mask requires neutralize_edges")
+        return self.predict_anomaly_score(perturbation.apply_mask(mask).dataset)
 
     def predict_anomaly_score(self, input_object: OrthrusAlertCase) -> float:  # type: ignore[override]
         if not isinstance(input_object, OrthrusAlertCase):
@@ -91,23 +112,76 @@ class RealOrthrusAnoAdapter(OrthrusAnoAdapter):
         if input_object.full_data is None:
             raise ValueError("OrthrusAlertCase.full_data is required for real ORTHRUS inference")
 
-        batch = _move_to_device_if_possible(input_object.temporal_data, self.device, name="temporal_data")
-        full_data = _move_to_device_if_possible(input_object.full_data, self.device, name="full_data")
+        # PyG .to() mutates the container: move a shallow copy of the batch.
+        batch = input_object.temporal_data
+        if self.device is not None:
+            batch = _move_to_device_if_possible(copy.copy(batch), self.device, name="temporal_data")
+        # Official ORTHRUS indexes the CPU history using e_id.cpu(). Never move
+        # or perturb this shared context while scoring the current batch.
+        full_data = input_object.full_data
         num_edges = _infer_batch_num_edges(batch)
 
-        if self.require_eval_mode and callable(getattr(self.model, "eval", None)):
-            self.model.eval()
+        state_context = self._state_snapshot.isolated() if self._state_snapshot else nullcontext()
+        with state_context:
+            if self.require_eval_mode and callable(getattr(self.model, "eval", None)):
+                self.model.eval()
 
-        with _no_grad_context():
-            edge_losses = self.model(batch, full_data, inference=True)
+            with _no_grad_context():
+                edge_losses = self.model(batch, full_data, inference=True)
 
-        values = _edge_losses_as_floats(edge_losses)
-        if len(values) != num_edges:
-            raise ValueError(
-                "ORTHRUS edge loss length mismatch: "
-                f"model returned {len(values)} loss(es) for a batch with {num_edges} edge(s)"
-            )
-        return float(sum(values) / len(values))
+            values = _edge_losses_as_floats(edge_losses)
+            if len(values) != num_edges:
+                raise ValueError(
+                    "ORTHRUS edge loss length mismatch: "
+                    f"model returned {len(values)} loss(es) for a batch with {num_edges} edge(s)"
+                )
+            return float(sum(values) / len(values))
+
+
+class _OrthrusStateSnapshot:
+    """Small in-memory snapshot of the mutable state in the audited encoder.
+
+    Weights are not copied. Restores clone snapshot values so an in-place model
+    update cannot corrupt the reference snapshot. None caches stay None.
+    """
+
+    def __init__(self, model):
+        if getattr(model, "use_contrastive_learning", False):
+            raise ValueError("State isolation currently supports non-contrastive ORTHRUS only")
+        encoder = getattr(model, "encoder", None)
+        loader = getattr(encoder, "neighbor_loader", None)
+        reindexer = getattr(encoder, "graph_reindexer", None)
+        if reindexer is None:
+            reindexer = getattr(model, "graph_reindexer", None)
+        self._entries = []
+        for owner, required, optional in (
+            (loader, ("cur_e_id", "neighbors", "e_id"), ("_assoc",)),
+            (reindexer, ("x_src_cache", "x_dst_cache"), ("assoc",)),
+            (encoder, (), ("assoc",)),
+        ):
+            if owner is None or any(not hasattr(owner, name) for name in required):
+                raise ValueError("State isolation requires an ORTHRUS neighbor loader and GraphReindexer")
+            for name in (*required, *optional):
+                if hasattr(owner, name):
+                    self._entries.append((owner, name, self._clone(getattr(owner, name))))
+
+    @staticmethod
+    def _clone(value):
+        if _is_torch_tensor(value):
+            return value.detach().clone()
+        return copy.deepcopy(value)
+
+    def restore(self):
+        for owner, name, value in self._entries:
+            setattr(owner, name, self._clone(value))
+
+    @contextmanager
+    def isolated(self):
+        try:
+            self.restore()
+            yield
+        finally:
+            self.restore()
 
 
 def _move_to_device_if_possible(value: Any, device: Any, *, name: str) -> Any:

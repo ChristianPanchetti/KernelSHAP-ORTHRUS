@@ -133,9 +133,12 @@ def test_unperturbed_smoke_test_uses_final_adapter_path(tmp_path: Path):
     assert result.num_edges == 3
     assert result.edge_loss_count == result.num_edges
     assert result.device == "test-device"
-    assert model.calls == [(batch, full_data, True)]
-    assert batch.device == "test-device"
-    assert full_data.device == "test-device"
+    scored_batch, scored_history, inference = model.calls[0]
+    assert scored_batch is not batch
+    assert scored_batch.device == "test-device"
+    assert scored_history is full_data and inference is True
+    assert batch.device is None
+    assert full_data.device is None
     assert loaded_paths == [
         (config.temporal_data_path, "test-device"),
         (config.full_data_path, "test-device"),

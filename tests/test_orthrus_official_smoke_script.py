@@ -82,3 +82,18 @@ def test_invalid_json_has_clear_error(tmp_path: Path):
 
     with pytest.raises(smoke_script.SmokeConfigError, match="JSON non valido"):
         smoke_script.load_config(path)
+
+
+def test_phase9_cli_uses_perturbative_runtime(tmp_path, monkeypatch, capsys):
+    path = tmp_path / "smoke.json"
+    path.write_text(json.dumps(valid_payload()), encoding="utf-8")
+    calls = []
+
+    def run(config, *, perturbative):
+        calls.append(perturbative)
+        return {"repeatable": True}
+
+    monkeypatch.setattr("adapters.orthrus_runtime.run_official_orthrus_smoke_test", run)
+    assert smoke_script.main([str(path), "--phase9"]) == 0
+    assert calls == [True]
+    assert json.loads(capsys.readouterr().out) == {"repeatable": True}

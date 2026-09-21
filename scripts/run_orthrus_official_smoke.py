@@ -1,4 +1,4 @@
-"""CLI minimale per lo smoke test non perturbato di ORTHRUS ufficiale."""
+"""Smoke ufficiale ORTHRUS; --phase9 prepara la storia e valida quattro mask."""
 
 from __future__ import annotations
 
@@ -62,10 +62,14 @@ def build_config(payload: Mapping[str, Any]):
         raise SmokeConfigError(f"Configurazione smoke test non valida: {exc}") from exc
 
 
-def run_from_config(path: Path):
+def run_from_config(path: Path, *, phase9: bool = False):
     from adapters.orthrus_runtime import run_official_orthrus_smoke_test
 
     config = build_config(load_config(path))
+    if phase9:
+        result = run_official_orthrus_smoke_test(config, perturbative=True)
+        print(json.dumps(result, indent=2))
+        return result
     result = run_official_orthrus_smoke_test(config)
     print(f"score: {result.score}")
     print(f"num_edges: {result.num_edges}")
@@ -82,9 +86,14 @@ def run_from_config(path: Path):
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Esegue uno smoke test ORTHRUS ufficiale non perturbato")
     parser.add_argument("config", type=Path, help="Path al file JSON dello smoke test")
+    parser.add_argument("--phase9", action="store_true",
+                        help="Verifica checkpoint, prepara prefisso temporale ufficiale ed esegue A1/B/A2/Z")
     args = parser.parse_args(argv)
     try:
-        run_from_config(args.config)
+        if args.phase9:
+            run_from_config(args.config, phase9=True)
+        else:
+            run_from_config(args.config)
     except Exception as exc:
         print(f"Errore smoke test ORTHRUS: {exc}", file=sys.stderr)
         return 1

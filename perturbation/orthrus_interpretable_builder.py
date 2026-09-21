@@ -131,13 +131,13 @@ class OrthrusInterpretableBuilder:
 
     @staticmethod
     def suggested_component_ids(case: OrthrusAlertCase) -> List[str]:
-        """Return a deterministic component ordering suggestion.
+        """Return the canonical component_to_edges insertion order.
 
-        This is a small helper for future integration: Kernel SHAP uses a vector mask,
-        so we need a stable component ordering.
+        Mask producers must use this same order as OrthrusPerturbationManager;
+        alphabetical sorting would silently assign masks to different components.
         """
 
-        return sorted(list((case.component_to_edges or {}).keys()))
+        return list((case.component_to_edges or {}).keys())
 
     @staticmethod
     def validate_case_minimum(case: OrthrusAlertCase) -> None:

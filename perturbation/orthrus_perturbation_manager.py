@@ -52,6 +52,8 @@ class OrthrusPerturbationManager:
         num_components = len(self.original.component_to_edges)
         if len(mask) != num_components:
             raise ValueError(f"Mask length mismatch: expected {num_components} components, got a mask of {len(mask)}")
+        if any(value not in (0, 1) for value in mask):
+            raise ValueError("Component mask must contain only 0 or 1")
 
         if self.mode == "drop_edges":
             perturbed_case = self._drop_edges(mask)
@@ -199,7 +201,7 @@ class OrthrusPerturbationManager:
             orig_num_edges = 0
 
         sorted_neutralized_edges = sorted(int(i) for i in neutralized_edges)
-        new_temporal_data = self._neutralize_temporal_data(original_case.temporal_data, sorted_neutralized_edges)
+        new_temporal_data, role_rows = self._neutralize_temporal_data(original_case.temporal_data, sorted_neutralized_edges)
 
         new_metadata = dict(original_case.metadata)
         new_metadata.update(
@@ -210,6 +212,10 @@ class OrthrusPerturbationManager:
                 "active_components": active_components,
                 "inactive_components": inactive_components,
                 "neutralized_edges": sorted_neutralized_edges,
+                "neutralized_source_rows": role_rows["x_src"],
+                "neutralized_destination_rows": role_rows["x_dst"],
+                "neutralization_policy": "all_occurrences_per_node_role",
+                "component_order": component_ids,
             }
         )
 
@@ -278,26 +284,45 @@ class OrthrusPerturbationManager:
 
         return new_data
 
-    def _neutralize_temporal_data(self, temporal_data: Any, neutralize_indices: list[int]) -> Any:
+    def _neutralize_temporal_data(self, temporal_data: Any, neutralize_indices: list[int]):
+        """Zero current node inputs, expanding independently for each node role.
+
+        An inactive edge masks every source occurrence of its source node and
+        every destination occurrence of its destination node, including rows in
+        active components. Expansion does not cross roles or propagate further.
+        Targets, history, messages and topology are unchanged. Mask positions
+        follow component_to_edges insertion order, never alphabetical order.
+        """
         if temporal_data is None:
-            return None
+            raise ValueError("neutralize_edges requires temporal_data")
+
+        for field in ("src", "dst", "x_src", "x_dst"):
+            if getattr(temporal_data, field, None) is None:
+                raise ValueError(f"neutralize_edges requires temporal_data.{field}")
+        num_edges = len(temporal_data.src)
+        if any(len(getattr(temporal_data, field)) != num_edges for field in ("dst", "x_src", "x_dst")):
+            raise ValueError("neutralize_edges requires edge-aligned node features")
+        if any(i < 0 or i >= num_edges for i in neutralize_indices):
+            raise ValueError("Component edge index outside current batch")
 
         try:
             new_data = copy.copy(temporal_data)
         except Exception as e:
             raise TypeError(f"Could not shallow-copy temporal_data of type {type(temporal_data)}") from e
 
-        feature_fields = ["msg", "x_src", "x_dst", "edge_feats"]
-        for field in feature_fields:
-            if hasattr(temporal_data, field):
-                original_attr = getattr(temporal_data, field)
-                if original_attr is not None:
-                    try:
-                        setattr(new_data, field, _zero_edge_rows(original_attr, neutralize_indices))
-                    except Exception as e:
-                        self.logger.warning(f"Could not neutralize attribute '{field}' (type: {type(original_attr)}): {e}")
+        role_rows = {}
+        for role, field in (("src", "x_src"), ("dst", "x_dst")):
+            node_ids = getattr(temporal_data, role)
+            if _is_torch_tensor(node_ids):
+                node_ids = node_ids.detach().cpu().tolist()
+            elif isinstance(node_ids, np.ndarray):
+                node_ids = node_ids.tolist()
+            masked_nodes = {node_ids[i] for i in neutralize_indices}
+            rows = [i for i, node in enumerate(node_ids) if node in masked_nodes]
+            role_rows[field] = rows
+            setattr(new_data, field, _zero_edge_rows(getattr(temporal_data, field), rows))
 
-        return new_data
+        return new_data, role_rows
 
 
 def _zero_edge_rows(value: Any, indices: list[int]) -> Any:

@@ -281,8 +281,13 @@ def run_official_orthrus_smoke_test(
     config: OrthrusOfficialRuntimeConfig,
     *,
     modules: Optional[OfficialOrthrusModules] = None,
-) -> OrthrusOfficialSmokeTestResult:
-    """Run one unperturbed batch through the official cfg-driven ORTHRUS path."""
+    perturbative: bool = False,
+) -> OrthrusOfficialSmokeTestResult | dict[str, Any]:
+    """Run the existing smoke, or opt into temporal preparation plus A1/B/A2/Z.
+
+    The perturbative path verifies a training checkpoint and follows official
+    validation/test order. The default retains the original direct-batch smoke.
+    """
 
     normalized = replace(
         config,
@@ -299,7 +304,7 @@ def run_official_orthrus_smoke_test(
     try:
         # Official config.py defines ROOT_ARTIFACT_DIR as "./artifacts".
         os.chdir(normalized.external_root)
-        return _run_official_orthrus_smoke_test(normalized, official)
+        return _run_official_orthrus_smoke_test(normalized, official, perturbative=perturbative)
     finally:
         os.chdir(previous_cwd)
 
@@ -307,8 +312,12 @@ def run_official_orthrus_smoke_test(
 def _run_official_orthrus_smoke_test(
     config: OrthrusOfficialRuntimeConfig,
     official: OfficialOrthrusModules,
-) -> OrthrusOfficialSmokeTestResult:
+    *, perturbative: bool = False,
+) -> OrthrusOfficialSmokeTestResult | dict[str, Any]:
     cfg = _load_official_cfg(config, official.config)
+    if perturbative and (config.split not in {"val", "test"} or config.model_epoch_dir is None
+                         or getattr(cfg, "_test_mode", False)):
+        raise OrthrusRuntimeError("Perturbative evaluation requires val/test and an official training checkpoint, without _test_mode")
 
     try:
         loaded = official.data_utils.load_all_datasets(cfg)
@@ -364,6 +373,11 @@ def _run_official_orthrus_smoke_test(
             "Pretrained weights were applied after model_epoch_dir; they replace model weights but not neighbor-loader state"
         )
 
+    if perturbative:
+        batch, temporal_info = _prepare_temporal_batch(config, official, cfg, model, splits, full_data)
+        case = OrthrusAlertCase(batch, full_data=full_data, metadata=temporal_info)
+        return _validate_four_masks(config, case, model, warnings)
+
     if callable(getattr(graph, "to", None)):
         moved = graph.to(device=config.device)
         if moved is not None:
@@ -404,6 +418,155 @@ def _run_official_orthrus_smoke_test(
         device=str(config.device),
         warnings=tuple(warnings),
     )
+
+
+def _prepare_temporal_batch(config, official, cfg, model, splits, full_data):
+    """Follow official testing: verified end-of-train loader, empty caches,
+    then validation and test prefixes. Never infer the selected batch here.
+    """
+    torch = official.torch or _import_torch_clearly()
+    loader = model.encoder.neighbor_loader
+    reindexer = model.graph_reindexer
+    if model.encoder.graph_reindexer is not reindexer:
+        raise OrthrusRuntimeError("Encoder and model must share GraphReindexer")
+    if reindexer.x_src_cache is not None or reindexer.x_dst_cache is not None:
+        raise OrthrusRuntimeError("Official testing must start with fresh GraphReindexer caches")
+    train_edges = sum(len(g.src) for g in splits["train"])
+    if loader.cur_e_id != train_edges:
+        raise OrthrusRuntimeError(
+            f"Checkpoint is not end-of-train: cur_e_id={loader.cur_e_id}, train_edges={train_edges}. No inference executed."
+        )
+
+    # Verify actual historical memory, not just its counter. Replay only topology
+    # into a separate CPU loader, with official training batch boundaries.
+    print(f"Checking checkpoint history against {train_edges} training edges (no model forward)", flush=True)
+    expected = type(loader)(num_nodes=loader.e_id.shape[0], size=loader.size, device="cpu")
+    for graph in splits["train"]:
+        for batch in official.factory.batch_loader_factory(cfg, graph, reindexer):
+            expected.insert(batch.src.cpu(), batch.dst.cpu())
+    if expected.cur_e_id != train_edges:
+        raise OrthrusRuntimeError("Training loader did not cover all training edges")
+    for start in range(0, loader.e_id.shape[0], 65536):
+        end = start + 65536
+        actual_ids = loader.e_id[start:end].cpu()
+        expected_ids = expected.e_id[start:end]
+        valid = expected_ids >= 0
+        if (not torch.equal(actual_ids, expected_ids)
+                or not torch.equal(loader.neighbors[start:end].cpu()[valid], expected.neighbors[start:end][valid])):
+            raise OrthrusRuntimeError("Checkpoint historical neighbors/e_id disagree with training artifacts; no inference executed")
+    del expected
+    # Moving tensors preserves the history; unlike changing cur_e_id, it does
+    # not invent temporal state. Official load_model does not map these tensors.
+    for name in ("neighbors", "e_id", "_assoc"):
+        setattr(loader, name, getattr(loader, name).to(config.device))
+
+    adapter = RealOrthrusAnoAdapter(model, device=None)
+    offset = train_edges
+    prefix_batches = 0
+    for split in ("val", "test"):
+        for graph_index, graph in enumerate(splits[split]):
+            print(f"Preparing {split}/{graph_index}, current global offset={offset}", flush=True)
+            graph.to(device=config.device)
+            for batch_index, batch in enumerate(official.factory.batch_loader_factory(cfg, graph, reindexer)):
+                count = len(batch.src)
+                if loader.cur_e_id != offset:
+                    raise OrthrusRuntimeError("Neighbor-loader counter lost alignment with full_data")
+                for field in ("t", "edge_type", "msg"):
+                    if not torch.equal(getattr(batch, field).cpu(), getattr(full_data, field)[offset:offset + count].cpu()):
+                        raise OrthrusRuntimeError(f"Batch {field} does not match full_data at offset {offset}")
+                if (split, graph_index, batch_index) == (config.split, config.graph_index, config.batch_index):
+                    return batch, {"dataset": config.dataset_name, "split": split,
+                                   "graph_index": graph_index, "batch_index": batch_index,
+                                   "global_edge_offset": offset, "train_edges": train_edges,
+                                   "prefix_batches": prefix_batches,
+                                   "temporal_preparation": "verified_train_checkpoint_then_official_eval_prefix"}
+                adapter.predict_anomaly_score(OrthrusAlertCase(batch, full_data=full_data))
+                offset += count
+                prefix_batches += 1
+            graph.to("cpu")
+        if split == config.split:
+            break
+    raise OrthrusRuntimeError("Requested batch not found in official evaluation sequence")
+
+
+def _tensor_fingerprint(value):
+    """Bounded-memory byte digest, also safe for uninitialized scratch tensors."""
+    import hashlib
+    if value is None or isinstance(value, (int, float, str)):
+        return value
+    digest = hashlib.sha256()
+    flat = value.detach().reshape(-1)
+    for start in range(0, flat.numel(), 1024 * 1024):
+        digest.update(flat[start:start + 1024 * 1024].contiguous().cpu().numpy().tobytes())
+    return (str(value.dtype), str(value.device), tuple(value.shape), digest.hexdigest())
+
+
+def _validate_four_masks(config, case, model, warnings):
+    """One serial A1/B/A2/Z validation; no additional baseline inference."""
+    import math
+    from perturbation.orthrus_interpretable_builder import OrthrusInterpretableBuilder
+    from perturbation.orthrus_perturbation_manager import OrthrusPerturbationManager
+
+    count = case.num_edges
+    if count != 1024:
+        raise OrthrusRuntimeError(f"Phase 9 validation expects 1024 edges, found {count}")
+    builder = OrthrusInterpretableBuilder(grouping_mode="node", max_components=8)
+    builder.build(case)
+    component_ids = builder.suggested_component_ids(case)
+    perturbation = OrthrusPerturbationManager(case, mode="neutralize_edges")
+    # Capture only now: the selected batch has never been forwarded.
+    adapter = RealOrthrusAnoAdapter(model, device=None, isolate_state=True)
+    entries = adapter._state_snapshot._entries
+    state_before = [_tensor_fingerprint(getattr(owner, name)) for owner, name, _ in entries]
+    structure_fields = ("src", "dst", "t", "edge_index", "edge_type")
+    original_fields = (*structure_fields, "x_src", "x_dst", "msg", "edge_feats")
+    original = {name: _tensor_fingerprint(getattr(case.temporal_data, name, None)) for name in original_fields}
+    history = {name: _tensor_fingerprint(value) for name, value in case.full_data}
+    ones = [1] * len(component_ids)
+    b = ones.copy()
+    b[0] = 0
+    results = {}
+    observed_counts = []
+
+    def record_loss_count(module, args, output):
+        observed_counts.append(int(output.numel()))
+
+    hook = model.register_forward_hook(record_loss_count)
+    try:
+        for label, mask in (("A1", ones), ("B", b), ("A2", ones), ("Z", [0] * len(ones))):
+            perturbed = perturbation.apply_mask(mask).dataset
+            if perturbed.num_edges != count or any(
+                _tensor_fingerprint(getattr(perturbed.temporal_data, name)) != original[name]
+                for name in structure_fields
+            ):
+                raise OrthrusRuntimeError(f"{label}: perturbation changed batch structure or targets")
+            before_calls = len(observed_counts)
+            score = adapter.predict_anomaly_score(perturbed)
+            if not math.isfinite(score) or observed_counts[before_calls:] != [count]:
+                raise OrthrusRuntimeError(f"{label}: non-finite score or unexpected edge loss count")
+            if [_tensor_fingerprint(getattr(owner, name)) for owner, name, _ in entries] != state_before:
+                raise OrthrusRuntimeError(f"{label}: model state was not restored")
+            if {name: _tensor_fingerprint(value) for name, value in case.full_data} != history:
+                raise OrthrusRuntimeError(f"{label}: full_data changed")
+            if any(_tensor_fingerprint(getattr(case.temporal_data, name, None)) != original[name]
+                   for name in original_fields) or any(
+                _tensor_fingerprint(getattr(perturbed.temporal_data, name)) != original[name]
+                for name in structure_fields
+            ):
+                raise OrthrusRuntimeError(f"{label}: original batch or scored structure changed")
+            results[label] = {"score": score, "edge_loss_count": observed_counts[-1]}
+            print(f"{label}: score={score}, edge_loss_count={observed_counts[-1]}, invariants=OK", flush=True)
+    finally:
+        hook.remove()
+    repeatable = math.isclose(results["A1"]["score"], results["A2"]["score"], rel_tol=1e-6, abs_tol=1e-8)
+    if not repeatable:
+        raise OrthrusRuntimeError(f"A1/A2 differ beyond rtol=1e-6, atol=1e-8: {results}")
+    return {**case.metadata, "device": str(config.device), "num_edges": count,
+            "components": case.component_to_edges, "inactive_component_B": component_ids[0],
+            "evaluations": results, "repeatable": repeatable, "rtol": 1e-6, "atol": 1e-8,
+            "invariants_verified": True, "old_baseline_comparable": False,
+            "baseline_note": "Previous smoke temporal state is not documented; A1 is the new prepared baseline",
+            "warnings": warnings}
 
 
 def _validate_official_runtime_config(config: OrthrusOfficialRuntimeConfig) -> None:
