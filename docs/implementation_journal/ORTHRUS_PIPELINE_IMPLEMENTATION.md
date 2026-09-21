@@ -10,6 +10,71 @@ Il progetto disponeva della pipeline dummy completa, del contenitore ORTHRUS, de
 
 ## Step corrente
 
+### Fase 9 completata — validazione reale THEIA_E5 (2026-09-21)
+
+La Fase 9 è stata validata sul caso THEIA_E5 selezionato il **21 settembre
+2026**, nel container Linux ORTHRUS con ambiente Python **pids**. I risultati
+riportati qui provengono dall'esecuzione sul server comunicata dall'utente;
+non è stata rieseguita alcuna inferenza nella repository Windows.
+L'implementazione della perturbazione e dello snapshot/restore del 17 settembre
+e la preparazione temporale del 20 settembre sono distinte da questa
+validazione reale. Le sezioni datate precedenti conservano lo stato storico
+dei lavori, superato per questo caso dall'esito positivo riportato qui.
+
+Configurazione e stato immediatamente precedente al batch:
+
+| Parametro | Valore |
+| --- | --- |
+| dataset | THEIA_E5 |
+| split | test |
+| graph_index | 0 |
+| batch_index | 0 |
+| device | cuda |
+| numero di edge | 1024 |
+| global_edge_offset | 16351122 |
+| train_edges | 12385364 |
+| prefix_batches | 3921 |
+
+Il runtime ha verificato la memoria del checkpoint rispetto agli edge train,
+attraversato il prefisso temporale di validation e acquisito lo snapshot
+immediatamente prima di test/0/0. Le quattro valutazioni sono partite dallo
+stesso snapshot iniziale ORTHRUS.
+
+| Valutazione | Mask | Score | Edge losses |
+| --- | --- | --- | --- |
+| A1 | Tutte le componenti attive | 0.7171946001362812 | 1024 |
+| B | Componente node:1301260 inattiva | 0.7381046357841115 | 1024 |
+| A2 | Tutte le componenti attive nuovamente | 0.7171945968802902 | 1024 |
+| Z | Tutte le componenti selezionate inattive | 0.8296128124493407 | 1024 |
+
+Gli score sono finiti. La ripetibilità A1 ≈ A2 è stata verificata con
+`rtol = 1e-6` e `atol = 1e-8`. I controlli di invarianza e di ripristino
+dello stato ORTHRUS dopo ogni valutazione sono risultati soddisfatti.
+La perturbazione modifica esclusivamente le feature `x_src` e `x_dst`:
+`full_data`, topologia, numero e ordine degli edge e target `edge_type`
+rimangono invariati. Non è richiesto che B o Z abbiano score inferiore ad A1.
+
+La vecchia baseline **0.7162450345895195** non è direttamente confrontabile:
+il precedente smoke test non documentava lo stesso stato temporale iniziale.
+La nuova baseline di riferimento per **test/0/0 con percorso temporale
+preparato è 0.7171946001362812** (A1).
+
+Durante l'esecuzione reale era emerso l'errore
+`'GlobalStorage' object has no attribute 'msg'`: la copia ORTHRUS sul server
+usa una patch per ridurre il consumo di memoria e non costruisce
+`full_data.msg` quando THEIA_E5 usa `edge_features = edge_type`.
+La correzione, già applicata e validata sul server, è stata riportata
+esattamente in `adapters/orthrus_runtime.py`, in `_prepare_temporal_batch`:
+il ciclo di controllo passa da `("t", "edge_type", "msg")` a
+`("t", "edge_type")`. Restano i controlli su `t`, `edge_type` e `cur_e_id`.
+Non viene ricostruito `full_data.msg` e non viene modificato external/orthrus.
+
+**Esito: Fase 9 completata e validata per il caso THEIA_E5 selezionato.**
+Gli score ottenuti sono reali, ma **non sono ancora valori SHAP**.
+Rimane da implementare il collegamento Kernel SHAP end-to-end.
+Questo aggiornamento Windows riguarda soltanto il runtime e il diario;
+nessun nuovo test, esperimento, commit o push è stato eseguito.
+
 ### Preparazione temporale ufficiale per la validazione Fase 9 (2026-09-20)
 
 Audit completato su data_utils.py, temporal.py, encoders.py, factory.py,
@@ -277,15 +342,15 @@ La CLI è testata senza artifact reali: i test verificano lettura e validazione 
 
 ## Cosa non è ancora implementato
 
-Le API ufficiali sono identificate e integrate, ma non sono ancora state eseguite con artifact reali. Restano la verifica del caricamento effettivo di `.TemporalData.simple` e `model_epoch_N`, della coerenza fra stato del neighbor loader, `e_id` e `full_data`, del device reale e infine l'orchestrazione end-to-end in `pipeline.py`.
+Al 21 settembre 2026 la Fase 9 è validata sul caso reale THEIA_E5 test/0/0
+descritto sopra. Rimane da implementare il collegamento Kernel SHAP end-to-end
+e la relativa orchestrazione in `pipeline.py`: gli score perturbativi validati
+non sono ancora valori SHAP.
 
 ## Prossimi step previsti
 
-- reperire gli artifact preprocessati e una directory `model_epoch_N` completa;
-- eseguire lo smoke test ufficiale prima su CPU;
-- verificare `TemporalData`, `full_data`, neighbor loader ed `e_id` durante l'inferenza;
-- eseguire un smoke test locale su artifact reale;
-- collegare builder, neutralizzazione, adapter ed explainer nella modalità ORTHRUS.
+- collegare builder, neutralizzazione, adapter isolato ed explainer Kernel SHAP
+  nella modalità ORTHRUS, partendo dal percorso temporale reale validato.
 
 ## Cronologia aggiornamenti
 

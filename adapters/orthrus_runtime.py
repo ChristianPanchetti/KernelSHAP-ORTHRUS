@@ -471,7 +471,7 @@ def _prepare_temporal_batch(config, official, cfg, model, splits, full_data):
                 count = len(batch.src)
                 if loader.cur_e_id != offset:
                     raise OrthrusRuntimeError("Neighbor-loader counter lost alignment with full_data")
-                for field in ("t", "edge_type", "msg"):
+                for field in ("t", "edge_type"):
                     if not torch.equal(getattr(batch, field).cpu(), getattr(full_data, field)[offset:offset + count].cpu()):
                         raise OrthrusRuntimeError(f"Batch {field} does not match full_data at offset {offset}")
                 if (split, graph_index, batch_index) == (config.split, config.graph_index, config.batch_index):
