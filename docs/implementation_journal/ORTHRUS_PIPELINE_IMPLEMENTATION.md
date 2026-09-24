@@ -10,6 +10,80 @@ All'inizio del percorso implementativo il progetto disponeva della pipeline dumm
 
 ## Step corrente
 
+### Visualizzazioni delle attribuzioni Kernel SHAP (2026-09-24)
+
+Aggiunto `xai/result_visualizer.py`: rendering matplotlib indipendente da SHAP,
+ORTHRUS e PostgreSQL. Accetta `KernelSHAPResult` tramite `to_dict()` oppure il
+JSON esistente, senza modificarne il formato e senza ricalcolare attribuzioni.
+Utilizza `components[].component_id/shap_value`, `baseline_score`,
+`original_anomaly_score` e `metadata.case.component_mapping/node_mapping`.
+Non considera i nomi liberi delle componenti una prova di identità verificata.
+
+Il bar plot orizzontale mostra tutte le componenti in ordine stabile decrescente
+per valore assoluto, mantenendo segno e valore numerico. Zero è visibile; rosso
+indica contributi positivi, blu negativi, grigio nulli. OTHER rimane una sola
+barra. Nessun top-k grafico o raggruppamento ulteriore. L'altezza cresce con il
+numero di componenti e le righe delle etichette.
+
+Il waterfall usa lo stesso ordine e le stesse etichette: parte da f(0), mostra
+ogni incremento firmato e termina con barre distinte per f(0)+sum(phi) e f(1).
+Il titolo riporta sempre il residuo f(1)-[f(0)+sum(phi)], anche quando nullo.
+Non introduce una componente per il residuo e non modifica i contributi per
+far coincidere i due score. Baseline e score ricostruito possono essere negativi.
+La somma è ricalcolata soltanto dai numeri esportati per disegnare il percorso;
+non viene rieseguito Kernel SHAP. Valori non finiti, componenti vuote o ID
+ripetuti causano un errore esplicito.
+
+Le etichette includono sempre il component_id. Path/cmd sono aggiunti soltanto
+per una componente con una sola source, nodo `resolved`, provenienza Fase 10
+`postgresql` o `offline_rows`, campo non dichiarato `unverified_fields`.
+Negli altri casi viene mostrato il solo ID. Non viene inferita un'identità da
+name/description, UUID o eventi incidenti. I dettagli lunghi sono abbreviati
+con ellissi e disposti su più righe; il JSON originale conserva il testo completo.
+OTHER è etichettata come aggregata. Il rendering non certifica autonomamente
+il contenuto delle righe offline: conserva il contratto e gli stati della Fase 10.
+
+Al termine del ramo ORTHRUS della pipeline, dopo mapping e salvataggio JSON,
+vengono generati automaticamente quattro file affiancati al JSON:
+`<stem>_shap_bar.png`, `<stem>_shap_bar.pdf`,
+`<stem>_shap_waterfall.png`, `<stem>_shap_waterfall.pdf`.
+Il ramo dummy rimane invariato. Matplotlib è dichiarato in requirements.txt;
+nessuna finestra interattiva è richiesta (FigureCanvasAgg). PNG a 160 dpi, PDF
+vettoriale, layout adattivo e bounding box completo. La generazione separata
+sovrascrive soltanto i quattro grafici omonimi, non il JSON.
+
+Dalla CLI esistente, dopo aver installato le dipendenze:
+
+```bash
+python main.py --plot-json outputs/theia_e5_phase11.json
+```
+
+Questo ramo termina prima di importare/eseguire la pipeline; le opzioni di
+inferenza non vengono utilizzate. Da Python: `export_plots(result, json_path)`
+o `export_plots_from_json(json_path)` nel modulo di visualizzazione.
+
+**Test locali mirati:** `tests/test_result_visualizer.py` controlla dati sintetici,
+ordine, contributi firmati, baseline non nulla, fallback delle etichette,
+provenienza/campi non verificati, OTHER, numerose componenti, input non validi
+e instradamento CLI senza pipeline. Include inoltre test del rendering,
+coordinate waterfall/residuo, file PNG/PDF, JSON invariato e import bloccati
+per modello/SHAP/database. Questi ultimi richiedono matplotlib.
+
+Comando eseguito: `python -m pytest -q tests/test_result_visualizer.py --basetemp=.pytest_plots_final_20260924 --tb=short`.
+Esito: **13 passed, 5 skipped** (tutti gli skip richiedono matplotlib).
+
+In questo ambiente matplotlib non è installato e i tentativi di download
+non sono riusciti (restrizioni socket/connessione e indice senza distribuzioni
+accessibili). Pertanto i test di rendering vengono esplicitamente saltati;
+la verifica visiva e l'effettiva produzione PNG/PDF restano da eseguire in un
+ambiente con la dipendenza disponibile. Non è stata simulata una verifica grafica.
+Nessun accesso al server, al modello reale o al database.
+
+Bar plot e waterfall visualizzano attribuzioni numeriche: **non sostituiscono**
+il sottografo attribuito o la heatmap temporale delle specifiche della tesi.
+Restano pendenti la validazione PostgreSQL Fase 10, quella end-to-end Fase 11
+e il controllo delle etichette/leggibilità sui risultati THEIA_E5 reali.
+
 ### Fase 11 — Kernel SHAP–ORTHRUS end-to-end (2026-09-24)
 
 Completato il ramo ORTHRUS dell'orchestrazione esistente in `pipeline.py`.

@@ -133,4 +133,5 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mapping-backend", choices=["postgresql", "offline"], default="postgresql",
                         help="PostgreSQL uses libpq environment/service settings, never repository credentials")
     parser.add_argument("--mapping-rows", type=str, help="Offline mapping JSON with events and nodes arrays")
+    parser.add_argument("--plot-json", type=str, help="Render PNG/PDF from an existing results JSON only; no pipeline execution")
     return parser.parse_args()

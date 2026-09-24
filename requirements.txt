@@ -2,3 +2,6 @@ numpy>=1.22
 
 # Official backend: SHAP's KernelExplainer
 shap>=0.44
+
+# Static attribution plots (PNG/PDF)
+matplotlib>=3.6

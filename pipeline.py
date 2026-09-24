@@ -146,6 +146,8 @@ def _run_orthrus_pipeline(cfg: AppConfig, logger: logging.Logger):
     result = replace(result, components=components, explanation_it=it, explanation_en=en, metadata=metadata)
     exporter = ResultExporter(logger=logger)
     exporter.export_json(result, cfg.output_json_path)
+    from xai.result_visualizer import export_plots
+    export_plots(result, cfg.output_json_path)
     if cfg.output_ranking_csv_path is not None:
         exporter.export_ranking_csv(result, cfg.output_ranking_csv_path)
     return result

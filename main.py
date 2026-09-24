@@ -8,7 +8,6 @@ from pathlib import Path
 from arg_parser import parse_args
 from config import AppConfig, KernelSHAPConfig, LoggingConfig, PerturbationConfig
 from logger import setup_logging
-from pipeline import run_kernel_shap_pipeline
 
 
 def _parse_level(level: str) -> int:
@@ -56,6 +55,12 @@ def build_config_from_args(args) -> AppConfig:
 
 def main() -> int:
     args = parse_args()
+    if args.plot_json:
+        from xai.result_visualizer import export_plots_from_json
+        for path in export_plots_from_json(args.plot_json):
+            print(path)
+        return 0
+    from pipeline import run_kernel_shap_pipeline
     cfg = build_config_from_args(args)
 
     logger = setup_logging(
