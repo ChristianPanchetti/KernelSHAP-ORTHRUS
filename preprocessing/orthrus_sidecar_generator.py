@@ -8,7 +8,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from preprocessing.orthrus_join_keys import build_join_key
+from preprocessing.orthrus_join_keys import (
+    build_join_key, extract_edge_join_keys,
+    decode_operation_from_temporal_data, artifact_sha256,
+)
 
 
 class OrthrusSidecarGenerator:
@@ -27,10 +30,13 @@ class OrthrusSidecarGenerator:
       Only load trusted files.
     """
 
-    def __init__(self, *, prefer_operation: bool = True):
+    def __init__(self, *, prefer_operation: bool = True, rel2id=None, edge_type_slice=None):
         self.prefer_operation = bool(prefer_operation)
+        self.rel2id = rel2id
+        self.edge_type_slice = edge_type_slice
 
-    def generate_from_graph(self, graph_path: str, output_path: str) -> Dict[str, Any]:
+    def generate_from_graph(self, graph_path: str, output_path: str,
+                            *, temporal_data_path: Optional[str] = None) -> Dict[str, Any]:
         """Generate a sidecar from a pre-embedding NetworkX MultiDiGraph.
 
         Expected edge attributes (as produced by ORTHRUS graph construction):
@@ -48,10 +54,12 @@ class OrthrusSidecarGenerator:
         missing_uuid_examples: List[int] = []
 
         total_edges = 0
+        graph_keys = []
         for i, (u, v, k, attr) in enumerate(graph.edges(data=True, keys=True)):
             total_edges += 1
             attr_dict = dict(attr) if isinstance(attr, dict) else {}
 
+            graph_keys.append(build_join_key(u, v, attr_dict.get("time"), attr_dict.get("label")))
             event_uuid = attr_dict.get("event_uuid")
             if not event_uuid:
                 if len(missing_uuid_examples) < 10:
@@ -91,6 +99,13 @@ class OrthrusSidecarGenerator:
             "edges": edges_out,
         }
 
+        if temporal_data_path is not None:
+            td = _load_temporal_data_like(temporal_data_path)
+            keys = extract_edge_join_keys(SimpleNamespace(temporal_data=td), self.rel2id, self.edge_type_slice)
+            if keys != graph_keys or any(None in key for key in keys):
+                raise ValueError("Graph order/keys do not match the supplied TemporalData artifact")
+            sidecar["provenance"] = {"method": "graph_order_verified", "edge_index_scope": "graph",
+                                     "artifact_sha256": artifact_sha256(temporal_data_path)}
         _write_json(sidecar, output_path)
         return sidecar
 
@@ -119,33 +134,25 @@ class OrthrusSidecarGenerator:
         src, dst, t = _extract_edge_arrays(td)
         num_edges = min(len(src), len(dst), len(t))
 
-        ops = _extract_operations(td) if self.prefer_operation else None
-        include_operation = ops is not None and len(ops) >= num_edges
+        ops = decode_operation_from_temporal_data(td, self.rel2id, self.edge_type_slice) if self.prefer_operation else []
+        include_operation = len(ops) == num_edges and all(op is not None for op in ops)
 
         join_strategy = "src_dst_t_operation" if include_operation else "src_dst_t"
 
+        rows = list(rows)
         row_map_full = _index_rows(rows, include_operation=True)
         row_map_partial = _index_rows(rows, include_operation=False)
 
         edges_out: Dict[str, Dict[str, Any]] = {}
         collisions = 0
         matched = 0
-        fallback_joins = 0
 
         for i in range(num_edges):
             op = ops[i] if include_operation else None
             key = build_join_key(src[i], dst[i], t[i], op if include_operation else None)
             hits = row_map_full.get(key, []) if include_operation else row_map_partial.get(key, [])
 
-            if include_operation and not hits:
-                # Best-effort fallback ignoring operation.
-                key2 = build_join_key(src[i], dst[i], t[i], None)
-                hits2 = row_map_partial.get(key2, [])
-                if len(hits2) == 1:
-                    hits = hits2
-                    fallback_joins += 1
-
-            chosen = hits[0] if hits else None
+            chosen = hits[0] if len(hits) == 1 else None
             if hits and len(hits) > 1:
                 collisions += 1
 
@@ -180,10 +187,8 @@ class OrthrusSidecarGenerator:
                 "Operation not available from TemporalData; join performed on (src,dst,t) only. "
                 "This may be ambiguous if multiple events share the same (src,dst,t)."
             )
-        if fallback_joins:
-            warnings.append(f"{fallback_joins} edges matched via fallback join without operation")
         if collisions:
-            warnings.append(f"{collisions} join-key collisions; picked the first matching row")
+            warnings.append(f"{collisions} join-key collisions; UUIDs left unresolved")
         if unmatched:
             warnings.append(f"{unmatched} edges unmatched")
 
@@ -199,6 +204,9 @@ class OrthrusSidecarGenerator:
             "edges": edges_out,
         }
 
+        if include_operation:
+            sidecar["provenance"] = {"method": "unique_complete_join", "edge_index_scope": "graph",
+                                     "artifact_sha256": artifact_sha256(temporal_data_path)}
         _write_json(sidecar, output_path)
         return sidecar
 
@@ -384,26 +392,15 @@ def _load_temporal_data_like(path: str) -> Any:
 
 
 def _extract_edge_arrays(td: Any) -> Tuple[List[Any], List[Any], List[Any]]:
-    src = list(getattr(td, "src", []) or [])
-    dst = list(getattr(td, "dst", []) or [])
-    t = list(getattr(td, "t", []) or [])
-    return src, dst, t
-
-
-def _extract_operations(td: Any) -> Optional[List[Any]]:
-    if hasattr(td, "operation"):
-        try:
-            return list(getattr(td, "operation") or [])
-        except Exception:
-            return None
-
-    if hasattr(td, "edge_type"):
-        try:
-            return list(getattr(td, "edge_type") or [])
-        except Exception:
-            return None
-
-    return None
+    arrays = []
+    for field in ("src", "dst", "t"):
+        value = getattr(td, field, None)
+        if value is None:
+            raise ValueError(f"TemporalData mapping requires {field}")
+        arrays.append(list(value))
+    if len({len(value) for value in arrays}) != 1:
+        raise ValueError("TemporalData mapping requires aligned src/dst/t")
+    return tuple(arrays)
 
 
 def _index_rows(rows: Iterable[Dict[str, Any]], *, include_operation: bool) -> Dict[Tuple, List[Dict[str, Any]]]:

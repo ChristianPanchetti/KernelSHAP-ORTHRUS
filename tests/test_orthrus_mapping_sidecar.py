@@ -70,15 +70,15 @@ def test_sidecar_incomplete_and_extra_edges(tmp_path: Path):
 
 
 def test_db_assisted_match_edges_to_rows_synthetic():
-    td = FakeTemporalData(src=[1, 2], dst=[2, 3], t=[100, 200], edge_type=[0, 1])
+    td = FakeTemporalData(src=[1, 2], dst=[2, 3], t=[100, 200], edge_type=["EVENT_EXECUTE", "EVENT_READ"])
     case = OrthrusAlertCase(temporal_data=td)
 
     provider = DbAssistedMappingProvider(db_config=None)
 
     edge_keys = extract_edge_join_keys(case)
     rows = [
-        {"src_index_id": 1, "dst_index_id": 2, "timestamp_rec": 100, "operation": "0", "event_uuid": "uuid-0"},
-        {"src_index_id": 2, "dst_index_id": 3, "timestamp_rec": 200, "operation": "1", "event_uuid": "uuid-1"},
+        {"src_index_id": 1, "dst_index_id": 2, "timestamp_rec": 100, "operation": "EVENT_EXECUTE", "event_uuid": "uuid-0"},
+        {"src_index_id": 2, "dst_index_id": 3, "timestamp_rec": 200, "operation": "EVENT_READ", "event_uuid": "uuid-1"},
     ]
 
     mapping = provider._match_edges_to_rows(edge_keys, rows)

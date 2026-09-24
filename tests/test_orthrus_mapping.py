@@ -58,7 +58,7 @@ def test_artifact_only_mapping_provider_enriches_case_and_describes_edges():
     assert "edge_type=0" in desc0
 
 
-def test_db_and_graph_assisted_providers_are_stubbed():
+def test_db_requires_a_data_source_and_graph_provider_remains_stubbed():
     td = FakeTemporalData(src=[1], dst=[2], t=[100], edge_type=[0])
     case = OrthrusAlertCase(temporal_data=td)
 

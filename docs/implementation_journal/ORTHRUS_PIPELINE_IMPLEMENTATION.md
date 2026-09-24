@@ -10,6 +10,178 @@ Il progetto disponeva della pipeline dummy completa, del contenitore ORTHRUS, de
 
 ## Step corrente
 
+### Fase 10 — DB-assisted mapping (2026-09-24)
+
+Implementato l'arricchimento delle spiegazioni nel provider esistente, dopo
+la verifica mirata dei file indicati dall'audit. Nessuna modifica a ORTHRUS,
+TemporalData/full_data, runtime, adapter, perturbazione, snapshot/restore o
+core Kernel SHAP. Nessun collegamento SHAP end-to-end e nessuna rigenerazione
+degli artifact. La validazione reale della Fase 9 del 21 settembre resta valida
+nel perimetro documentato sotto.
+
+**Nodi.** `DbAssistedMappingProvider.enrich_case` raccoglie gli `index_id`
+distinti negli estremi degli edge delle componenti richieste, oppure di tutto
+il caso se `component_ids` è omesso. Interroga `subject_node_table`,
+`file_node_table`, `netflow_node_table`; il tipo è associato alla tabella,
+non è una nuova colonna SQL. Conserva in `case.metadata["node_mapping"]`
+UUID, tipo, path, cmd e stato `resolved`, `missing`, `ambiguous` o
+`unresolvable`. Più righe, anche nella stessa tabella, non producono un UUID
+arbitrario. L'identità del nodo può essere risolta anche con path/cmd mancanti,
+elencati in `missing_fields`.
+
+Le colonne di rete `src_addr`, `src_port`, `dst_addr`, `dst_port` sono lette
+ma non pubblicate per default. Il parametro `verified_network_fields`
+consente esclusivamente le colonne già controllate dal chiamante sul dataset
+reale; le altre sono indicate come `unverified_fields`. Il controllo è una
+precondizione esterna, non una certificazione automatica dei valori. Questo
+limite è necessario perché il parser THEIA_E5 locale assegna erroneamente
+caratteri dell'UUID agli endpoint remoti in un ramo di `store_netflow`.
+
+**Eventi.** Le posizioni di `component_to_edges` sono indici locali del caso.
+Le chiavi di join sono `(src_index_id, dst_index_id, timestamp_rec, operation)`;
+il timestamp THEIA_E5 resta un intero in nanosecondi. L'orientamento è già quello
+del DB ORTHRUS, incluse le inversioni eseguite dal parser: il provider non
+inverte nuovamente gli estremi. Il numero del nodo non è un UUID. `_id` SQL,
+`event_uuid`, indice nel grafo e `global_edge_offset` restano distinti;
+gli `e_id` del neighbor loader non vengono usati.
+
+`orthrus_join_keys.py` decodifica one-hot Python/NumPy/Torch con il `rel2id`
+ufficiale fornito esplicitamente. Il vettore usa la posizione `rel2id[label]-1`;
+i valori numerici scalari, se forniti, sono invece ID della tabella `rel2id`,
+non indici argmax a base zero. Non è incorporato un vocabolario EVENT_*.
+Senza vocabolario, con vettori malformati o chiavi incomplete l'evento è
+`unresolvable`. Per un artifact con sola `msg` serve anche `edge_type_slice`
+ricavata dalla configurazione/layout effettivi, non stimata.
+
+Il provider assegna `edge_to_event_uuid` soltanto per identità risolte.
+Più righe compatibili danno `ambiguous`, zero righe `missing`; i dettagli
+restano in `edge_to_original_metadata`, le statistiche separate per nodi ed
+eventi in `mapping_quality`. `fail_on_unmatched=True` richiede la risoluzione
+di tutti gli eventi selezionati, non la completezza dei metadati dei nodi.
+Gli eventi compressi dal preprocessing non vengono ricostruiti: si cerca
+soltanto l'evento rappresentante dell'edge.
+
+**PostgreSQL e offline.** `rows` contiene gli eventi; `node_rows` contiene i
+nodi con `index_id`, `node_uuid`, `node_type` (`subject`, `file`, `netflow`) e
+le colonne pertinenti. Le righe fornite devono includere TUTTI i candidati
+per le chiavi richieste: un export troncato non dimostra unicità. Gli iterable
+sono materializzati una volta. È possibile fornire soltanto i nodi offline.
+
+Con `db_config` il driver opzionale `psycopg2` viene importato solo al fetch.
+Il provider apre e chiude una connessione propria in transazione read-only,
+usa colonne esplicite, parametri SQL, ID/chiavi distinti e blocchi da 200.
+Le ricerche nodo usano `index_id = ANY(%s)`; gli eventi usano le tuple complete
+o gli UUID già verificati. Gli indici evento VARCHAR ricevono parametri stringa,
+senza cast della colonna. Il timeout delle istruzioni è 30 secondi. Non vengono
+creati indici o modificato lo schema. Gli errori pubblici non includono DSN,
+host o messaggi del driver potenzialmente contenenti credenziali.
+
+Nessuna connessione PostgreSQL reale è stata tentata in Windows. I vincoli
+WHERE non garantiscono un accesso indicizzato: il DDL locale non dichiara
+indici adatti su index_id/event_uuid/chiave evento. Prima del controllo reale
+servono schema effettivo e EXPLAIN. Non eseguire scansioni massive per
+aggirare indici mancanti. La corrispondenza tra importazione DB e artifact è
+una precondizione da verificare sul server; gli index_id possono cambiare con
+una nuova importazione.
+
+Esempio offline, dopo aver costruito `case.component_to_edges`:
+
+```python
+provider = DbAssistedMappingProvider(rel2id=orthrus_rel2id)
+provider.enrich_case(case, rows=event_rows, node_rows=node_rows,
+                     component_ids=selected_component_ids)
+text = describe_component(case, selected_component_ids[0])
+```
+
+Per PostgreSQL sostituire con `DbAssistedMappingProvider(db_config={},
+rel2id=orthrus_rel2id)` e omettere `rows/node_rows`: `{}` usa la configurazione
+libpq predisposta fuori dal sorgente, per esempio ambiente/service file.
+Non stampare la configurazione di connessione. Passare un iterable vuoto
+esclude il fetch di quel tipo di righe. `orthrus_rel2id` deve provenire dal
+checkout effettivamente usato per gli artifact.
+
+L'arricchimento va chiamato una volta prima o dopo SHAP, per l'unione delle
+componenti richieste. Non è collegato alla funzione di score. I dizionari del
+caso sono riutilizzabili dalle descrizioni senza query; chiamate successive
+sostituiscono il precedente scope di arricchimento. Non è stata introdotta
+una cache persistente condivisa tra database diversi.
+
+**Sidecar e provenienza.** Il generatore esistente accetta
+`generate_from_graph(graph_path, output_path, temporal_data_path=...)`:
+confronta l'intera sequenza delle tuple del grafo con l'artifact e registra
+SHA-256 del file TemporalData e scope `graph`. Il caricamento verificato usa:
+
+```python
+SidecarMappingProvider(
+    sidecar_path,
+    temporal_data_path=graph_temporal_data_path,
+    graph_edge_offset=batch_start_in_graph,
+    rel2id=orthrus_rel2id,
+    edge_type_slice=original_msg_edge_type_slice,
+).enrich_case(case)
+```
+
+`graph_edge_offset` è obbligatorio nel percorso verificato e va ricavato dalla
+selezione reale del batch, non da `global_edge_offset`. Il loader verifica
+hash del file, cardinalità, corrispondenza della slice con il batch e tuple
+per edge. Chiavi duplicate nell'artifact restano prudentemente ambigue.
+Per artifact già dotati di `edge_type` lo slice non serve. L'hash verifica la
+coerenza dell'artifact, non autentica un sidecar proveniente da fonti non fidate.
+
+La generazione da righe assegna UUID solo su candidato unico; una discordanza
+di operazione non viene più ignorata. La provenienza verificabile viene
+registrata soltanto per join completi con operazione disponibile. Il vecchio
+fallback senza operazione resta un percorso legacy non verificato. Anche i
+sidecar legacy caricati senza `temporal_data_path` restano leggibili, ma sono
+marcati `unverified` e il provider DB non riutilizza i loro UUID come identità
+provate. La vecchia `validate_sidecar` controlla la struttura/copertura, non
+sostituisce il caricamento verificato.
+
+Solo gli UUID provenienti da sidecar verificati vengono riutilizzati direttamente;
+un precedente join DB viene ricontrollato sulle nuove righe per non nascondere
+eventuali nuovi candidati ambigui. Gli UUID verificati sono legati alle tuple ordinate e alle coordinate disponibili
+del caso tramite fingerprint. Un caso cambiato non riutilizza quelle identità.
+Il DB può poi cercare direttamente l'UUID e controllare comunque gli estremi:
+righe duplicate restano ambigue, tuple discordanti danno `conflict`. Un UUID
+già provato dal grafo può restare risolto anche senza riga DB, ma
+`database_status` distingue `missing` e `not_queried` dall'effettivo recupero.
+
+**Descrizioni node-based.** `component_mapping` conserva edge assegnati,
+nodi source/destination e righe `x_src/x_dst` coinvolte se la componente viene
+disattivata. La descrizione legge UUID, tipo, path/cmd, endpoint autorizzati,
+operazione, timestamp, stato e provenienza. `OTHER` può contenere più nodi.
+Il raggruppamento per source non viene esteso a tutti gli edge incidenti.
+Le righe neutralizzabili seguono `all_occurrences_per_node_role`, senza
+propagazione ricorsiva o tra ruoli; possono appartenere a componenti attive.
+Quando disponibili, i metadata Fase 9 della mask corrente sono mostrati
+separatamente come righe effettivamente neutralizzate. Nessun evento è eliminato.
+
+**Verifica locale mirata.** Eseguiti i test dei tre moduli mapping/sidecar già
+esistenti e il nuovo `tests/test_orthrus_db_mapping.py`, senza suite completa,
+checkpoint o THEIA_E5 reale. Copertura: identità nodi e campi mancanti,
+collisioni, one-hot, orientamento, eventi incompleti, politica dei nodi ripetuti,
+OTHER, sidecar fuori batch/artifact, grafo riordinato, UUID duplicati, query
+parametrizzate selettive/read-only e assenza di credenziali negli errori.
+
+```text
+python -m pytest -q tests/test_orthrus_db_mapping.py tests/test_orthrus_mapping.py tests/test_orthrus_mapping_sidecar.py tests/test_orthrus_sidecar_generator.py
+```
+
+Esito: **32 passed, 1 skipped**. Lo skip è il controllo Torch, non installato
+nel Python locale; il percorso NumPy one-hot è verificato. Il driver è simulato
+nei test SQL: compatibilità PostgreSQL, piani di esecuzione, dati reali e
+caricamento Torch degli artifact restano da validare sul server.
+
+**Controllo reale minimo successivo:** verificare schema/indici e provenienza
+DB-artifact; usare il caso test/0/0 da 1024 edge senza nuova inferenza; selezionare
+una componente source e pochi suoi edge, passare il rel2id effettivo; arricchire
+una volta; confrontare UUID/path/cmd e candidati evento con le righe DB,
+controllando orientamento e nanosecondi. Se disponibile, verificare il sidecar
+contro il grafo/artifact corrispondente e offset nel grafo. Controllare che
+ambiguità e valori mancanti siano riportati e che tensori, full_data e score
+non siano coinvolti. Abilitare i campi di rete solo dopo un controllo dei dati
+importati. Nessun test reale, commit o push in questo step.
+
 ### Fase 9 completata — validazione reale THEIA_E5 (2026-09-21)
 
 La Fase 9 è stata validata sul caso THEIA_E5 selezionato il **21 settembre
