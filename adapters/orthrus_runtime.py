@@ -277,18 +277,34 @@ def run_unperturbed_smoke_test(
     )
 
 
+def prepare_official_orthrus_case(
+    config: OrthrusOfficialRuntimeConfig, *, modules: Optional[OfficialOrthrusModules] = None,
+) -> tuple[OrthrusAlertCase, Any, dict, tuple[str, ...]]:
+    """Return (case, model, rel2id, warnings) immediately before the target batch.
+
+    Uses the phase-9 loading and temporal checks, without A1/B/A2/Z forwards.
+    The caller must construct its isolated adapter before any target forward.
+    """
+    return run_official_orthrus_smoke_test(
+        config, modules=modules, perturbative=True, prepare_only=True)
+
+
 def run_official_orthrus_smoke_test(
     config: OrthrusOfficialRuntimeConfig,
     *,
     modules: Optional[OfficialOrthrusModules] = None,
     perturbative: bool = False,
-) -> OrthrusOfficialSmokeTestResult | dict[str, Any]:
+    prepare_only: bool = False,
+) -> OrthrusOfficialSmokeTestResult | dict[str, Any] | tuple[OrthrusAlertCase, Any, dict, tuple[str, ...]]:
     """Run the existing smoke, or opt into temporal preparation plus A1/B/A2/Z.
 
     The perturbative path verifies a training checkpoint and follows official
     validation/test order. The default retains the original direct-batch smoke.
+    prepare_only returns the prepared objects without the four evaluations.
     """
 
+    if prepare_only and not perturbative:
+        raise ValueError("prepare_only requires temporal preparation")
     normalized = replace(
         config,
         external_root=Path(config.external_root).resolve(),
@@ -304,6 +320,8 @@ def run_official_orthrus_smoke_test(
     try:
         # Official config.py defines ROOT_ARTIFACT_DIR as "./artifacts".
         os.chdir(normalized.external_root)
+        if prepare_only:
+            return _run_official_orthrus_smoke_test(normalized, official, perturbative=True, prepare_only=True)
         return _run_official_orthrus_smoke_test(normalized, official, perturbative=perturbative)
     finally:
         os.chdir(previous_cwd)
@@ -312,8 +330,8 @@ def run_official_orthrus_smoke_test(
 def _run_official_orthrus_smoke_test(
     config: OrthrusOfficialRuntimeConfig,
     official: OfficialOrthrusModules,
-    *, perturbative: bool = False,
-) -> OrthrusOfficialSmokeTestResult | dict[str, Any]:
+    *, perturbative: bool = False, prepare_only: bool = False,
+) -> OrthrusOfficialSmokeTestResult | dict[str, Any] | tuple[OrthrusAlertCase, Any, dict, tuple[str, ...]]:
     cfg = _load_official_cfg(config, official.config)
     if perturbative and (config.split not in {"val", "test"} or config.model_epoch_dir is None
                          or getattr(cfg, "_test_mode", False)):
@@ -376,6 +394,8 @@ def _run_official_orthrus_smoke_test(
     if perturbative:
         batch, temporal_info = _prepare_temporal_batch(config, official, cfg, model, splits, full_data)
         case = OrthrusAlertCase(batch, full_data=full_data, metadata=temporal_info)
+        if prepare_only:
+            return case, model, dict(official.config.rel2id), tuple(warnings)
         return _validate_four_masks(config, case, model, warnings)
 
     if callable(getattr(graph, "to", None)):

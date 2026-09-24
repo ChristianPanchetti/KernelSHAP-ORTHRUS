@@ -6,9 +6,157 @@ La pipeline finale deve spiegare con Kernel SHAP uno score prodotto da ORTHRUS-a
 
 ## Stato prima di questo step
 
-Il progetto disponeva della pipeline dummy completa, del contenitore ORTHRUS, del builder, delle perturbazioni e dei mapping sintetici. `RealOrthrusAnoAdapter` esponeva soltanto metodi stub: non poteva invocare un modello né ridurre gli edge loss. Anche la modalità ORTHRUS di `pipeline.py` era, e rimane, non implementata.
+All'inizio del percorso implementativo il progetto disponeva della pipeline dummy completa, del contenitore ORTHRUS, del builder, delle perturbazioni e dei mapping sintetici. `RealOrthrusAnoAdapter` esponeva soltanto metodi stub: non poteva invocare un modello né ridurre gli edge loss. Anche la modalità ORTHRUS di `pipeline.py` era non implementata. Le fasi documentate sotto descrivono il successivo completamento.
 
 ## Step corrente
+
+### Fase 11 — Kernel SHAP–ORTHRUS end-to-end (2026-09-24)
+
+Completato il ramo ORTHRUS dell'orchestrazione esistente in `pipeline.py`.
+Il percorso usa il KernelSHAPExplainer e ResultExporter già presenti:
+preparazione ufficiale -> builder node-based -> score_mask isolato -> SHAP ->
+un solo arricchimento DB-assisted -> descrizioni e JSON. Nessun nuovo motore
+SHAP, adapter, modello, dashboard o formato di export.
+
+**Raccordo additivo alla Fase 9.** `prepare_official_orthrus_case` restituisce
+`(case, model, rel2id, warnings)` tramite il percorso ufficiale già esistente.
+L'opzione additiva `prepare_only=True`, sempre con `perturbative=True`, restituisce
+gli oggetti subito dopo `_prepare_temporal_batch`, prima di A1/B/A2/Z. Non
+modifica il caricamento di cfg/artifact/checkpoint, il controllo della storia,
+il prefisso validation/test, il contatore o le verifiche di allineamento.
+La modalità `--phase9` continua a eseguire le quattro valutazioni come prima.
+Il ramo SHAP non ripete quelle quattro valutazioni. Il ripristino della directory
+corrente del runtime resta nel medesimo `finally`.
+
+La pipeline crea un unico manager `neutralize_edges` e un unico
+`RealOrthrusAnoAdapter(..., device=None, isolate_state=True)` sul modello e sul
+batch già predisposti al device dalla preparazione ufficiale. Tutti i forward
+del batch selezionato passano da `adapter.score_mask(manager, mask)`, serialmente,
+con lo stesso snapshot pre-batch. Nessuna modifica ad adapter, neutralizzazione,
+LastNeighborLoader, GraphReindexer, snapshot/restore, edge losses, full_data,
+ordine, topologia o target. Nessuna modifica a `external/orthrus`.
+
+**Componenti e maschere.** Il builder esistente costruisce componenti source-based.
+La pipeline le converte in InterpretableComponent/InterpretableSpace nell'ordine
+canonico del dizionario: mask[j], component_id[j] e shap_values[j] rimangono
+allineati. Il ranking riordina solo la presentazione. Controlli prima dello scoring
+SHAP rifiutano componenti vuote, indici invalidi, sovrapposizioni nell'assegnazione
+degli edge e copertura incompleta. Il limite 1 è consentito se esiste una sola
+componente; se il builder produce nodo + OTHER viene rifiutato esplicitamente.
+Il builder e la politica di perturbazione non sono stati modificati.
+
+OTHER mantiene un singolo valore SHAP per l'aggregato. Gli interventi sulle
+feature possono sovrapporsi per i nodi ripetuti nello stesso ruolo: non sono
+interventi indipendenti sugli eventi originali e non sono prove causali.
+Con la partizione completa del builder, tutti zero neutralizza tutte le righe
+x_src/x_dst, mantenendo storia, topologia, messaggi e target. I metadata della
+Fase 10 descrivono le righe coinvolte dalla disattivazione di una componente,
+non una singola perturbazione rappresentativa di tutte le coalizioni SHAP.
+
+**Scorer e diagnostica.** Il raccordo opzionale `mask_scorer` dell'explainer
+è usato sia per gli estremi sia per le coalizioni della libreria. La cache è
+condivisa: f(0) e f(1) non vengono rivalutati quando richiesti da SHAP. Il percorso
+legacy resta disponibile se lo scorer opzionale non viene passato.
+`shap.KernelExplainer` mantiene background zero, input uno e lo stesso kernel,
+sampling e solver della libreria: nessuna normalizzazione delle attribuzioni.
+
+f(0) è la baseline SHAP corrente, f(1) lo score originale corrente. Non viene
+usato alcuno score storico della Fase 9 come costante. Si esportano expected_value,
+somma dei contributi, residuo f(1)-f(0)-sum(phi), seed, budget richiesto,
+`evaluated_unique_masks` (forward effettivi richiesti allo scorer),
+`effective_nsamples` (nsamplesAdded della libreria, quando disponibile), versione
+SHAP e l1_reg effettivo. Non sono conteggiati nei forward SHAP quelli del prefisso
+temporale. expected_value corrisponde al background unico; f(0) può essere non
+nullo e maggiore di f(1).
+
+Score e valori SHAP devono essere finiti; la cardinalità delle attribuzioni deve
+coincidere con il numero di componenti e expected_value deve essere scalare.
+Un residuo oltre `1e-8 + 1e-6 * max(abs(f1), abs(f0), abs(sum(phi)))` produce un
+warning esplicito, salvato nel JSON. Viene segnalato anche un expected_value
+discordante da f(0). I valori non vengono corretti e lo scarto non è attribuito
+automaticamente al sampling. Il default l1_reg resta quello della libreria,
+registrato nell'output; la versione sul server deve essere controllata.
+
+**Mapping Fase 10.** Dopo SHAP il provider esistente arricchisce una volta
+l'unione di tutte le componenti; top_k limita solo il riepilogo. Non ci sono
+query nello scorer. I metadati sono associati per component_id, con node_mapping,
+component_mapping, edge_to_original_metadata, edge_to_event_uuid e mapping_quality.
+Restano visibili missing, ambiguous, unresolvable e conflict. Il provider non
+riutilizza UUID non verificati. I campi di rete restano disabilitati per default,
+come nella Fase 10; questa CLI minima non li certifica né li abilita.
+
+PostgreSQL usa `db_config={}` e le impostazioni libpq predisposte fuori dal
+repository (ambiente/service file). Non si aggiungono credenziali ai JSON o ai
+log. Un errore di mapping richiesto si propaga e non viene esportato un nuovo
+risultato dichiarato completo. Per verifiche offline, `--mapping-rows` legge
+un JSON con array `events` e `nodes` nel contratto Fase 10; devono contenere
+tutti i candidati delle chiavi richieste. Non sono state modificate le funzioni
+di mapping. La pipeline non genera nuovi sidecar o artifact.
+
+**Risultato.** KernelSHAPResult e ResultExporter rimangono i contenitori/exporter
+esistenti. Il JSON include ordine canonico, valore e segno, ranking, descrizione
+arricchita, score, diagnostica, metadati originali, qualità/provenienza, device,
+raggruppamento e coordinate temporali del caso. `record_indices`/`num_records`
+sono riutilizzati come posizioni/conteggio degli edge locali del batch; la
+semantica e `component_edges` sono dichiarati nei metadata. Non sono UUID, indici
+nel grafo o e_id. Le sintesi IT/EN includono path/cmd disponibili nei nomi leggibili
+e precisano la semantica degli interventi; OTHER rimane aggregata. Gli oggetti
+frozen vengono aggiornati tramite dataclasses.replace dopo il mapping.
+
+**Avvio dalla CLI esistente**, dalla root KSHAP_ORTHRUS sul server Linux:
+
+```bash
+python main.py --mode orthrus --adapter real \
+  --orthrus-config examples/orthrus_theia_e5_real_smoke.json \
+  --grouping-mode node --perturbation-mode neutralize_edges \
+  --max-components 8 --num-samples 256 --seed 0 \
+  --mapping-backend postgresql --output outputs/theia_e5_phase11.json
+```
+
+Il path JSON è quello del caso reale già predisposto sul server, non creato qui.
+Deve indicare THEIA_E5/test/0/0, checkpoint e device effettivi. I path relativi
+seguono la convenzione dello smoke esistente (directory di lancio). Predisporre
+prima la connessione libpq al database corretto, senza credenziali versionate.
+La CLI ORTHRUS usa per default node, neutralize_edges, max_components=8 e adapter
+real; il legacy mantiene exec_path, drop_records, limite 50 e adapter dummy.
+Le opzioni legacy incompatibili vengono rifiutate; `--input` non carica artifact
+nel percorso ORTHRUS, che usa esclusivamente `--orthrus-config`. Il device viene
+dal JSON ufficiale. Il budget 256 copre le 254 coalizioni interne quando M=8,
+ma il costo reale non è stato misurato.
+
+Per usare righe offline sostituire soltanto `--mapping-backend postgresql` con
+`--mapping-backend offline --mapping-rows /percorso/righe_verificate.json`.
+Il modello rimane reale: offline riguarda il recupero dei metadati, non una
+simulazione dell'inferenza. I test locali iniettano esplicitamente un modello
+simulato e non sono presentati come esecuzioni THEIA_E5.
+
+**Verifica locale.** Test mirati eseguiti con SHAP reale e modello stateful
+simulato, adapter e manager esistenti, mapping offline e controlli di esportazione.
+Lo scorer sintetico ha baseline 5, contributi [4, -1] e interazione tra componenti
+tramite destination ripetuta: verifica ordine non alfabetico, isolamento,
+riuso della cache, un solo mapping dopo i forward, stati missing/ambiguous e JSON.
+Sono coperti anche OTHER, componente singola, componenti vuote, limite 1,
+fallimento del mapping obbligatorio, output non finiti/cardinalità errata e
+residuo segnalato. Il nuovo test runtime verifica il ritorno prima delle quattro
+valutazioni; sono stati riutilizzati i test sintetici del runtime/CLI e le
+regressioni legacy di export, additività e riproducibilità.
+
+```text
+python -m pytest -q tests/test_orthrus_phase11.py tests/test_orthrus_official_runtime.py tests/test_orthrus_official_smoke_script.py tests/test_pipeline_smoke.py tests/test_shap_additivity.py tests/test_reproducibility.py --basetemp=.pytest_phase11_20260924_b --tb=short
+```
+
+Esito: **33 passed**, nessuno skip. Il primo tentativo senza basetemp aveva
+incontrato errori di permesso nella directory temporanea Windows; usando una
+directory del workspace i test sono stati eseguiti. Nessuna suite completa,
+nessun accesso PostgreSQL, nessuna esecuzione ORTHRUS reale o rigenerazione artifact.
+
+**Validazione reale ancora pendente:** prima validare il mapping PostgreSQL
+Fase 10 sullo schema e sugli artifact del server; poi eseguire questa pipeline
+su THEIA_E5 test/0/0 con lo stesso percorso temporale. Controllare finitezza,
+expected_value, residuo, costo delle coalizioni e coerenza component_id -> SHAP ->
+metadati/ruoli. Non serve rieseguire sistematicamente A1/B/A2/Z; la preparazione
+temporale validata viene comunque eseguita. Torch/CUDA e il modello reale non
+sono stati esercitati in Windows. Nessun commit o push.
 
 ### Fase 10 — DB-assisted mapping (2026-09-24)
 

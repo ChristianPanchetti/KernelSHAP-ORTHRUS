@@ -24,11 +24,16 @@ def build_config_from_args(args) -> AppConfig:
     # Default log file under the output directory.
     log_file = Path(args.log_file) if args.log_file else (output_json.parent / "run.log")
 
+    is_orthrus = args.mode == "orthrus"
+    if is_orthrus and (args.input != "logs_input.json" or args.time_window_seconds != 60):
+        raise ValueError("--input and --time-window-seconds are legacy options; use --orthrus-config for ORTHRUS")
+    if not is_orthrus and (args.orthrus_config or args.mapping_rows or args.mapping_backend != "postgresql"):
+        raise ValueError("Official runtime and DB mapping options require --mode orthrus")
     return AppConfig(
         input_path=Path(args.input),
         output_json_path=output_json,
         output_ranking_csv_path=output_csv,
-        adapter_type=args.adapter,
+        adapter_type=args.adapter or ("real" if is_orthrus else "dummy"),
         pipeline_mode=str(args.mode),
         device="cpu",
         shap=KernelSHAPConfig(
@@ -37,12 +42,15 @@ def build_config_from_args(args) -> AppConfig:
             top_k=int(args.top_k),
         ),
         perturbation=PerturbationConfig(
-            grouping_mode=str(args.grouping_mode),
-            max_components=int(args.max_components) if args.max_components is not None else None,
+            grouping_mode=args.grouping_mode or ("node" if is_orthrus else "exec_path"),
+            max_components=int(args.max_components) if args.max_components is not None else (8 if is_orthrus else 50),
             time_window_seconds=int(args.time_window_seconds),
-            perturbation_mode=str(args.perturbation_mode),
+            perturbation_mode=args.perturbation_mode or ("neutralize_edges" if is_orthrus else "drop_records"),
         ),
         logging=LoggingConfig(level=str(args.log_level), log_file=log_file),
+        orthrus_config_path=Path(args.orthrus_config) if args.orthrus_config else None,
+        mapping_backend=args.mapping_backend,
+        mapping_rows_path=Path(args.mapping_rows) if args.mapping_rows else None,
     )
 
 

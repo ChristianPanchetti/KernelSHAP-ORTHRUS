@@ -56,6 +56,11 @@ class AppConfig:
     perturbation: PerturbationConfig = field(default_factory=PerturbationConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
+    # Official runtime JSON already used by the phase-9 launcher.
+    orthrus_config_path: Optional[Path] = None
+    mapping_backend: str = "postgresql"  # postgresql (libpq environment) | offline
+    mapping_rows_path: Optional[Path] = None  # offline JSON: events + nodes
+
     # Optional extra output
     output_ranking_csv_path: Optional[Path] = None
 

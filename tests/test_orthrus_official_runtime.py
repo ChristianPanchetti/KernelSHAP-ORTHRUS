@@ -346,3 +346,25 @@ def test_four_mask_validation_runs_exactly_four_isolated_scores():
     assert model.encoder.neighbor_loader.cur_e_id == 10
     assert model.graph_reindexer.x_src_cache is None
     assert model.hook is None
+
+
+def test_public_preparation_returns_before_phase9_evaluations(tmp_path, monkeypatch):
+    import adapters.orthrus_runtime as runtime
+    config = make_config(tmp_path)
+    modules, cfg, graphs, full_data, model, batches = make_modules([])
+    modules.config.rel2id = {"EVENT_READ": 1, 1: "EVENT_READ"}
+    seen = []
+
+    def prepare(received_config, official, received_cfg, received_model, splits, history):
+        assert received_model is model and received_cfg is cfg and history is full_data
+        seen.append("temporal_preparation")
+        return batches[1], {"global_edge_offset": 123, "batch_index": 1}
+
+    monkeypatch.setattr(runtime, "_prepare_temporal_batch", prepare)
+    monkeypatch.setattr(runtime, "_validate_four_masks", lambda *a: pytest.fail("Must not execute A1/B/A2/Z"))
+    cwd = Path.cwd()
+    case, received_model, relations, warnings = runtime.prepare_official_orthrus_case(config, modules=modules)
+    assert seen == ["temporal_preparation"] and model.calls == []
+    assert received_model is model and case.temporal_data is batches[1] and case.full_data is full_data
+    assert case.metadata["global_edge_offset"] == 123 and relations == modules.config.rel2id
+    assert warnings == () and Path.cwd() == cwd

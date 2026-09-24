@@ -40,7 +40,7 @@ def parse_args() -> argparse.Namespace:
         default="dummy",
         help=(
             "Pipeline mode: 'dummy' uses LogDataset + Dummy adapter (debug/test); "
-            "'orthrus' is the future ORTHRUS/DARPA path based on OrthrusAlertCase (stub) (default: dummy)"
+            "'orthrus' uses the officially prepared real model and DB-assisted mapping (default: dummy)"
         ),
     )
 
@@ -48,7 +48,7 @@ def parse_args() -> argparse.Namespace:
         "--adapter",
         type=str,
         choices=["dummy", "placeholder", "real"],
-        default="dummy",
+        default=None,
         help="Which ORTHRUS-ano adapter to use (default: dummy)",
     )
 
@@ -75,6 +75,7 @@ def parse_args() -> argparse.Namespace:
         "--grouping-mode",
         type=str,
         choices=[
+            "node",
             "exec_path",
             "record",
             "entity_id",
@@ -83,8 +84,8 @@ def parse_args() -> argparse.Namespace:
             "event_type",
             "local_subgraph",
         ],
-        default="exec_path",
-        help="How to build binary components (default: exec_path)",
+        default=None,
+        help="Grouping (default: dummy=exec_path, orthrus=node)",
     )
     parser.add_argument(
         "--time-window-seconds",
@@ -95,13 +96,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-components",
         type=int,
-        default=50,
-        help="Max number of interpretable components (default: 50)",
+        default=None,
+        help="Max components (default: dummy=50, orthrus=8)",
     )
     parser.add_argument(
         "--perturbation-mode",
         type=str,
         choices=[
+            "neutralize_edges",
             "drop_records",
             "neutralize_command",
             "mask_features",
@@ -109,8 +111,8 @@ def parse_args() -> argparse.Namespace:
             "drop_subgraph",
             "remove_node_with_incident_edges",
         ],
-        default="drop_records",
-        help="Perturbation strategy (default: drop_records)",
+        default=None,
+        help="Perturbation (default: dummy=drop_records, orthrus=neutralize_edges)",
     )
 
     parser.add_argument(
@@ -127,4 +129,8 @@ def parse_args() -> argparse.Namespace:
         help="Optional log file path (default: outputs/run.log)",
     )
 
+    parser.add_argument("--orthrus-config", type=str, help="Existing official runtime JSON (phase 9)")
+    parser.add_argument("--mapping-backend", choices=["postgresql", "offline"], default="postgresql",
+                        help="PostgreSQL uses libpq environment/service settings, never repository credentials")
+    parser.add_argument("--mapping-rows", type=str, help="Offline mapping JSON with events and nodes arrays")
     return parser.parse_args()

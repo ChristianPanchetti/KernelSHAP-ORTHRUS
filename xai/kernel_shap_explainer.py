@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -39,6 +40,7 @@ class KernelSHAPResult:
                     "description": c.description,
                     "num_records": len(c.record_indices),
                     "shap_value": float(self.shap_values[i]),
+                    "sign": "positive" if self.shap_values[i] > 0 else "negative" if self.shap_values[i] < 0 else "zero",
                 }
             )
 
@@ -97,6 +99,7 @@ class KernelSHAPExplainer:
         space: InterpretableSpace,
         perturbation: PerturbationManager,
         adapter: OrthrusAnoAdapter,
+        *, mask_scorer=None,
     ) -> KernelSHAPResult:
         m = space.num_components
         if m == 0:
@@ -109,13 +112,46 @@ class KernelSHAPExplainer:
         z0 = [0] * m
         z1 = [1] * m
 
-        baseline_score = adapter.predict_anomaly_score(perturbation.apply_mask(z0).dataset)
-        original_score = adapter.predict_anomaly_score(perturbation.apply_mask(z1).dataset)
+        cache: Dict[Tuple[int, ...], float] = {}
 
+        def score(mask):
+            raw = np.asarray(mask)
+            if raw.shape != (m,) or not np.all((raw == 0) | (raw == 1)):
+                raise ValueError("Scorer requires a binary mask aligned with components")
+            key = tuple(int(v) for v in raw)
+            if key not in cache:
+                value = (mask_scorer(key) if mask_scorer is not None else
+                         adapter.predict_anomaly_score(perturbation.apply_mask(key).dataset))
+                value = float(value)
+                if not math.isfinite(value):
+                    raise ValueError("Mask scorer returned a non-finite anomaly score")
+                cache[key] = value
+            return cache[key]
+
+        baseline_score, original_score = score(z0), score(z1)
         self._logger.info(f"Baseline score f(0): {baseline_score:.6f}")
         self._logger.info(f"Original score f(1): {original_score:.6f}")
-
-        shap_values = self._explain_with_shap_library(space, perturbation, adapter, baseline_mask=z0)
+        shap_values, diagnostics = self._explain_with_shap_library(
+            space, perturbation, adapter, baseline_mask=z0, mask_scorer=score)
+        if len(shap_values) != m or not all(math.isfinite(v) for v in shap_values):
+            raise ValueError("SHAP values must be finite and match the component count")
+        expected = diagnostics["expected_value"]
+        if not math.isfinite(expected):
+            raise ValueError("SHAP expected_value must be finite")
+        shap_sum = math.fsum(shap_values)
+        residual = original_score - baseline_score - shap_sum
+        tolerance = 1e-8 + 1e-6 * max(abs(original_score), abs(baseline_score), abs(shap_sum))
+        warnings = []
+        if abs(residual) > tolerance:
+            warnings.append("SHAP reconstruction residual exceeds tolerance; check scorer consistency and solver diagnostics")
+        if abs(expected - baseline_score) > tolerance:
+            warnings.append("SHAP expected_value differs from f(0)")
+        for warning in warnings:
+            self._logger.warning(warning)
+        diagnostics.update(shap_sum=shap_sum, reconstruction_residual=residual,
+                           numerical_tolerance=tolerance, warnings=warnings,
+                           evaluated_unique_masks=len(cache),
+                           component_order=[c.component_id for c in space.components])
 
         ranking = _rank_by_abs_value(shap_values)
         explanation_it, explanation_en = _format_explanation(
@@ -135,6 +171,7 @@ class KernelSHAPExplainer:
             explanation_it=explanation_it,
             explanation_en=explanation_en,
             metadata={
+                **diagnostics,
                 "num_components": m,
                 "num_samples": self.num_samples,
                 "seed": self.seed,
@@ -150,7 +187,8 @@ class KernelSHAPExplainer:
         perturbation: PerturbationManager,
         adapter: OrthrusAnoAdapter,
         baseline_mask: Sequence[int],
-    ) -> List[float]:
+        *, mask_scorer,
+    ) -> Tuple[List[float], Dict[str, Any]]:
         try:
             import shap  # type: ignore
         except Exception as e:  # noqa: BLE001
@@ -162,20 +200,9 @@ class KernelSHAPExplainer:
         baseline = np.asarray([list(baseline_mask)], dtype=float)  # (1, M)
         x = np.asarray([[1.0] * m], dtype=float)  # explain full input (1, M)
 
-        cache: Dict[Tuple[int, ...], float] = {}
-
         def model(z: np.ndarray) -> np.ndarray:
-            # z: (N, M)
-            out: List[float] = []
-            for row in z:
-                key = tuple(int(v) for v in row.round().astype(int).tolist())
-                if key in cache:
-                    out.append(cache[key])
-                    continue
-                score = float(adapter.predict_anomaly_score(perturbation.apply_mask(key).dataset))
-                cache[key] = score
-                out.append(score)
-            return np.asarray(out, dtype=float)
+            # Serial calls, with the same cached scorer used for both endpoints.
+            return np.asarray([mask_scorer(row) for row in z], dtype=float)
 
         # SHAP's KernelExplainer may sample coalitions using NumPy's global RNG.
         # Setting a seed here improves reproducibility across runs.
@@ -186,6 +213,8 @@ class KernelSHAPExplainer:
 
         # KernelExplainer returns array for single-output; list for multi-output.
         if isinstance(sv, list):
+            if len(sv) != 1:
+                raise ValueError("Expected single-output SHAP values")
             sv = sv[0]
         sv = np.asarray(sv, dtype=float)
         if sv.ndim == 2 and sv.shape[0] == 1:
@@ -193,7 +222,15 @@ class KernelSHAPExplainer:
         if sv.shape != (m,):
             sv = sv.reshape(-1)
 
-        return [float(v) for v in sv]
+        expected = np.asarray(explainer.expected_value, dtype=float)
+        if expected.size != 1:
+            raise ValueError("Expected a scalar SHAP expected_value")
+        return [float(v) for v in sv], {
+            "expected_value": float(expected.reshape(-1)[0]),
+            "shap_version": getattr(shap, "__version__", "unknown"),
+            "effective_nsamples": getattr(explainer, "nsamplesAdded", None),
+            "l1_reg": getattr(explainer, "l1_reg", None),
+        }
 
 
 def _rank_by_abs_value(values: Sequence[float]) -> List[int]:
