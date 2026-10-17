@@ -1,0 +1,13 @@
+{
+  "external_root": "/home",
+  "config_path": "/home/config/orthrus.yml",
+  "dataset_name": "THEIA_E5",
+  "model_epoch_dir": "/home/artifacts/detection/gnn_training/ce9ee96998ea1aa3d25bd5c9364c94d4a78bdf8381903c11bde954ccdb63bc68/THEIA_E5/trained_models/model_epoch_1",
+  "split": "test",
+  "graph_index": 40,
+  "batch_index": 0,
+  "device": "cuda",
+  "from_weights_path": "/home/weights/THEIA_E5.pkl",
+  "overrides": {},
+  "require_model_epoch": true
+}
