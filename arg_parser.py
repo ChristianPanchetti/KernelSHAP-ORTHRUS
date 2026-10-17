@@ -134,4 +134,14 @@ def parse_args() -> argparse.Namespace:
                         help="PostgreSQL uses libpq environment/service settings, never repository credentials")
     parser.add_argument("--mapping-rows", type=str, help="Offline mapping JSON with events and nodes arrays")
     parser.add_argument("--plot-json", type=str, help="Render PNG/PDF from an existing results JSON only; no pipeline execution")
-    return parser.parse_args()
+    parser.add_argument("--scan-test", action="store_true", help="Scan official val/test temporally; no SHAP or DB")
+    parser.add_argument("--scan-output", default="outputs/theia_e5_test_scan.csv", help="Incremental test batch CSV")
+    parser.add_argument("--scan-ground-truth", help="Offline JSON export of official labelling.get_ground_truth node IDs")
+    args = parser.parse_args()
+    if args.scan_test and (args.mode != "orthrus" or args.adapter not in (None, "real")
+                           or not args.orthrus_config or not args.scan_ground_truth or args.plot_json
+                           or args.mapping_rows or args.mapping_backend != "postgresql"):
+        parser.error("--scan-test requires --mode orthrus, real adapter, --orthrus-config and --scan-ground-truth; no mapping/plot options")
+    if not args.scan_test and (args.scan_ground_truth or args.scan_output != "outputs/theia_e5_test_scan.csv"):
+        parser.error("Scan output/ground truth options require --scan-test")
+    return args

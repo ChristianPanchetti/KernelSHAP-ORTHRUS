@@ -295,16 +295,22 @@ def run_official_orthrus_smoke_test(
     modules: Optional[OfficialOrthrusModules] = None,
     perturbative: bool = False,
     prepare_only: bool = False,
+    scan_consumer=None,
 ) -> OrthrusOfficialSmokeTestResult | dict[str, Any] | tuple[OrthrusAlertCase, Any, dict, tuple[str, ...]]:
     """Run the existing smoke, or opt into temporal preparation plus A1/B/A2/Z.
 
     The perturbative path verifies a training checkpoint and follows official
     validation/test order. The default retains the original direct-batch smoke.
     prepare_only returns the prepared objects without the four evaluations.
+    scan_consumer receives the shared temporal sequence and must infer each
+    yielded batch once; the configured single-case target is ignored.
     """
 
     if prepare_only and not perturbative:
         raise ValueError("prepare_only requires temporal preparation")
+    if scan_consumer is not None:
+        config = replace(config, split="test", graph_index=0, batch_index=0)
+        perturbative = True
     normalized = replace(
         config,
         external_root=Path(config.external_root).resolve(),
@@ -322,7 +328,7 @@ def run_official_orthrus_smoke_test(
         os.chdir(normalized.external_root)
         if prepare_only:
             return _run_official_orthrus_smoke_test(normalized, official, perturbative=True, prepare_only=True)
-        return _run_official_orthrus_smoke_test(normalized, official, perturbative=perturbative)
+        return _run_official_orthrus_smoke_test(normalized, official, perturbative=perturbative, scan_consumer=scan_consumer)
     finally:
         os.chdir(previous_cwd)
 
@@ -330,7 +336,7 @@ def run_official_orthrus_smoke_test(
 def _run_official_orthrus_smoke_test(
     config: OrthrusOfficialRuntimeConfig,
     official: OfficialOrthrusModules,
-    *, perturbative: bool = False, prepare_only: bool = False,
+    *, perturbative: bool = False, prepare_only: bool = False, scan_consumer=None,
 ) -> OrthrusOfficialSmokeTestResult | dict[str, Any] | tuple[OrthrusAlertCase, Any, dict, tuple[str, ...]]:
     cfg = _load_official_cfg(config, official.config)
     if perturbative and (config.split not in {"val", "test"} or config.model_epoch_dir is None
@@ -391,6 +397,9 @@ def _run_official_orthrus_smoke_test(
             "Pretrained weights were applied after model_epoch_dir; they replace model weights but not neighbor-loader state"
         )
 
+    if scan_consumer is not None:
+        return scan_consumer(cfg, _iter_official_temporal_batches(config, official, cfg, model, splits, full_data), model, tuple(warnings))
+
     if perturbative:
         batch, temporal_info = _prepare_temporal_batch(config, official, cfg, model, splits, full_data)
         case = OrthrusAlertCase(batch, full_data=full_data, metadata=temporal_info)
@@ -441,8 +450,25 @@ def _run_official_orthrus_smoke_test(
 
 
 def _prepare_temporal_batch(config, official, cfg, model, splits, full_data):
-    """Follow official testing: verified end-of-train loader, empty caches,
-    then validation and test prefixes. Never infer the selected batch here.
+    adapter = RealOrthrusAnoAdapter(model, device=None)
+    sequence = _iter_official_temporal_batches(config, official, cfg, model, splits, full_data)
+    try:
+        for case in sequence:
+            info = case.metadata
+            if config.split == "val" and info["split"] == "test":
+                break
+            if (info["split"], info["graph_index"], info["batch_index"]) == (config.split, config.graph_index, config.batch_index):
+                return case.temporal_data, info
+            adapter.predict_anomaly_score(case)
+    finally:
+        sequence.close()
+    raise OrthrusRuntimeError("Requested batch not found in official evaluation sequence")
+
+
+def _iter_official_temporal_batches(config, official, cfg, model, splits, full_data):
+    """Verify checkpoint once, then yield official val/test order before inference.
+
+    Consumer must advance the model exactly once before requesting another batch.
     """
     torch = official.torch or _import_torch_clearly()
     loader = model.encoder.neighbor_loader
@@ -480,33 +506,32 @@ def _prepare_temporal_batch(config, official, cfg, model, splits, full_data):
     for name in ("neighbors", "e_id", "_assoc"):
         setattr(loader, name, getattr(loader, name).to(config.device))
 
-    adapter = RealOrthrusAnoAdapter(model, device=None)
     offset = train_edges
     prefix_batches = 0
     for split in ("val", "test"):
         for graph_index, graph in enumerate(splits[split]):
             print(f"Preparing {split}/{graph_index}, current global offset={offset}", flush=True)
             graph.to(device=config.device)
-            for batch_index, batch in enumerate(official.factory.batch_loader_factory(cfg, graph, reindexer)):
-                count = len(batch.src)
-                if loader.cur_e_id != offset:
-                    raise OrthrusRuntimeError("Neighbor-loader counter lost alignment with full_data")
-                for field in ("t", "edge_type"):
-                    if not torch.equal(getattr(batch, field).cpu(), getattr(full_data, field)[offset:offset + count].cpu()):
-                        raise OrthrusRuntimeError(f"Batch {field} does not match full_data at offset {offset}")
-                if (split, graph_index, batch_index) == (config.split, config.graph_index, config.batch_index):
-                    return batch, {"dataset": config.dataset_name, "split": split,
-                                   "graph_index": graph_index, "batch_index": batch_index,
-                                   "global_edge_offset": offset, "train_edges": train_edges,
-                                   "prefix_batches": prefix_batches,
-                                   "temporal_preparation": "verified_train_checkpoint_then_official_eval_prefix"}
-                adapter.predict_anomaly_score(OrthrusAlertCase(batch, full_data=full_data))
-                offset += count
-                prefix_batches += 1
-            graph.to("cpu")
-        if split == config.split:
-            break
-    raise OrthrusRuntimeError("Requested batch not found in official evaluation sequence")
+            try:
+                for batch_index, batch in enumerate(official.factory.batch_loader_factory(cfg, graph, reindexer)):
+                    count = len(batch.src)
+                    if loader.cur_e_id != offset:
+                        raise OrthrusRuntimeError("Neighbor-loader counter lost alignment with full_data")
+                    for field in ("t", "edge_type"):
+                        if not torch.equal(getattr(batch, field).cpu(), getattr(full_data, field)[offset:offset + count].cpu()):
+                            raise OrthrusRuntimeError(f"Batch {field} does not match full_data at offset {offset}")
+                    yield OrthrusAlertCase(batch, full_data=full_data, metadata={
+                        "dataset": config.dataset_name, "split": split,
+                        "graph_index": graph_index, "batch_index": batch_index,
+                        "global_edge_offset": offset, "train_edges": train_edges,
+                        "prefix_batches": prefix_batches,
+                        "temporal_preparation": "verified_train_checkpoint_then_official_eval_prefix"})
+                    offset += count
+                    prefix_batches += 1
+                    if loader.cur_e_id != offset:
+                        raise OrthrusRuntimeError("Batch inference did not advance temporal state exactly once")
+            finally:
+                graph.to("cpu")
 
 
 def _tensor_fingerprint(value):

@@ -106,7 +106,7 @@ def build_figures(result):
 
 
 def export_plots(result, output_json_path):
-    """Save four sibling files named <JSON stem>_shap_{bar,waterfall}.{png,pdf}."""
+    """Save SHAP plots and offline provenance/summary artifacts beside the JSON."""
     path = Path(output_json_path)
     figures = build_figures(result)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -120,7 +120,8 @@ def export_plots(result, output_json_path):
     finally:
         for fig in figures:
             fig.clear()
-    return outputs
+    from xai.provenance_visualizer import export_context
+    return outputs + export_context(result, path)
 
 
 def export_plots_from_json(json_path):

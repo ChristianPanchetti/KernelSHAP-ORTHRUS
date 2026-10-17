@@ -102,6 +102,11 @@ class RealOrthrusAnoAdapter(OrthrusAnoAdapter):
         return self.predict_anomaly_score(perturbation.apply_mask(mask).dataset)
 
     def predict_anomaly_score(self, input_object: OrthrusAlertCase) -> float:  # type: ignore[override]
+        values = self.predict_edge_losses(input_object)
+        return float(sum(values) / len(values))
+
+    def predict_edge_losses(self, input_object: OrthrusAlertCase) -> list[float]:
+        """One validated forward; state advances unless isolation was requested."""
         if not isinstance(input_object, OrthrusAlertCase):
             raise TypeError(
                 "RealOrthrusAnoAdapter expects an OrthrusAlertCase. "
@@ -135,7 +140,7 @@ class RealOrthrusAnoAdapter(OrthrusAnoAdapter):
                     "ORTHRUS edge loss length mismatch: "
                     f"model returned {len(values)} loss(es) for a batch with {num_edges} edge(s)"
                 )
-            return float(sum(values) / len(values))
+            return values
 
 
 class _OrthrusStateSnapshot:

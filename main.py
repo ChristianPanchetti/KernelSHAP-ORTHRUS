@@ -17,7 +17,7 @@ def _parse_level(level: str) -> int:
 def build_config_from_args(args) -> AppConfig:
     """Build `AppConfig` from CLI arguments."""
 
-    output_json = Path(args.output)
+    output_json = Path(args.scan_output) if getattr(args, "scan_test", False) else Path(args.output)
     output_csv = Path(args.output_csv) if args.output_csv else None
 
     # Default log file under the output directory.
@@ -60,7 +60,6 @@ def main() -> int:
         for path in export_plots_from_json(args.plot_json):
             print(path)
         return 0
-    from pipeline import run_kernel_shap_pipeline
     cfg = build_config_from_args(args)
 
     logger = setup_logging(
@@ -71,7 +70,12 @@ def main() -> int:
     )
 
     try:
-        run_kernel_shap_pipeline(cfg, logger)
+        if args.scan_test:
+            from xai.orthrus_test_scanner import run_test_scan
+            run_test_scan(args.orthrus_config, args.scan_output, args.scan_ground_truth, logger=logger)
+        else:
+            from pipeline import run_kernel_shap_pipeline
+            run_kernel_shap_pipeline(cfg, logger)
     except Exception as e:  # noqa: BLE001
         logger.exception(f"Pipeline failed: {e}")
         return 1
