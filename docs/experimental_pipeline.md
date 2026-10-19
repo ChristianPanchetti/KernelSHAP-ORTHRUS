@@ -8,13 +8,13 @@ artifact/checkpoint identity, optional weight override, environment versions,
 device and database namespace. Do not regenerate artifacts merely to explain
 an existing score. The tracked THEIA_E5 JSONs select distinct test cases:
 
-| Configuration suffix | Graph | Batch |
+| Configuration in `experiments/theia_e5/` | Graph | Batch |
 | --- | ---: | ---: |
-| `real_smoke` | 0 | 0 |
-| `high_malicious` | 40 | 0 |
-| `high_no_malicious` | 35 | 82 |
-| `low_malicious` | 98 | 39 |
-| `median_reference` | 42 | 35 |
+| `initial_validation.json` | 0 | 0 |
+| `high_malicious.json` | 40 | 0 |
+| `high_no_malicious.json` | 35 | 82 |
+| `low_malicious.json` | 98 | 39 |
+| `median_reference.json` | 42 | 35 |
 
 The filenames describe selected cases using node membership, not certified
 batch detector labels. Paths target the recorded `/home` server layout and must
@@ -26,8 +26,8 @@ Run this utility only in the matching official server/database environment:
 
 ```bash
 python scripts/export_scan_ground_truth.py \
-  --orthrus-config examples/orthrus_theia_e5_real_smoke.json \
-  --output outputs/theia_e5_official_node_ground_truth.json
+  --orthrus-config experiments/theia_e5/initial_validation.json \
+  --output outputs/theia_e5/scan/theia_e5_official_node_ground_truth.json
 ```
 
 The exporter calls official `labelling.get_ground_truth(cfg)` using the same
@@ -40,9 +40,10 @@ Do not substitute UUIDs or invent an empty label set when labels are unavailable
 
 ```bash
 python main.py --mode orthrus --adapter real \
-  --orthrus-config examples/orthrus_theia_e5_real_smoke.json \
-  --scan-test --scan-output outputs/theia_e5_test_scan.csv \
-  --scan-ground-truth outputs/theia_e5_official_node_ground_truth.json
+  --orthrus-config experiments/theia_e5/initial_validation.json \
+  --scan-test --scan-output outputs/theia_e5/scan/theia_e5_test_scan.csv \
+  --scan-ground-truth outputs/theia_e5/scan/theia_e5_official_node_ground_truth.json \
+  --log-file outputs/theia_e5/scan/theia_e5_test_scan.log
 ```
 
 The scanner verifies checkpoint history, forwards validation then all test
@@ -73,10 +74,12 @@ from the verified checkpoint: CSV is not a temporal-state checkpoint.
 
 ```bash
 python main.py --mode orthrus --adapter real \
-  --orthrus-config examples/orthrus_theia_e5_real_smoke.json \
+  --orthrus-config experiments/theia_e5/initial_validation.json \
   --grouping-mode node --perturbation-mode neutralize_edges \
   --max-components 8 --num-samples 256 --seed 0 \
-  --mapping-backend postgresql --output outputs/explanation.json
+  --mapping-backend postgresql \
+  --output outputs/theia_e5/explanations/initial_validation/result.json \
+  --log-file outputs/theia_e5/explanations/initial_validation/run.log
 ```
 
 For verified offline metadata, replace the mapping option with
@@ -93,7 +96,7 @@ PNG/PDF, provenance subgraph PNG/PDF, and summary table CSV/PNG/PDF. Optional
 labels/precision; display labels may be shortened. Regenerate visuals offline:
 
 ```bash
-python main.py --plot-json outputs/explanation.json
+python main.py --plot-json outputs/theia_e5/explanations/initial_validation/result.json
 ```
 
 This reads the result without model/SHAP/database execution. The provenance graph
@@ -101,6 +104,42 @@ shows up to five components and two counterparts per component; the summary
 retains all components. Context events/counterparts have no separate attribution.
 Read signed values relative to the neutralized `f(0)` reference, never as a
 benign/malicious classification. See [architecture](framework_architecture.md).
+
+## Final artifact archive
+
+`outputs/theia_e5/scan/` retains the full scan CSV, summary JSON, official node
+export and dedicated scan log. `outputs/theia_e5/explanations/<case>/` retains
+`result.json`, `run.log`, `shap_bar.png/pdf`, `waterfall.png/pdf`,
+`provenance_subgraph.png/pdf` and `summary_table.csv/png/pdf` for each of the five
+cases. Result and scan payloads are preserved byte-for-byte; embedded historical
+paths still identify the original export/run locations rather than the relocated
+files. The initial-validation log is the original final-run session extracted
+from the former aggregate log, not a newly executed run.
+
+The initial-validation summary CSV was checked against all eight rows derived
+from its final JSON; the provenance/summary PNGs and PDF text were checked for
+matching components, signed values, identities and counts before relocation.
+No inference, SHAP or plot regeneration was used for this check. Figures were
+renamed for the archive only. The unchanged plot exporter creates JSON-stem
+prefixed filenames when invoked again; it does not overwrite the short archive
+names automatically.
+
+Saved final scores below are read from the archived JSONs, not new measurements:
+
+| Case | Original batch score | Neutralized reference |
+| --- | ---: | ---: |
+| initial_validation | 0.717194598622882 | 0.8296128102228977 |
+| high_malicious | 1.7857131471537286 | 2.0763393884990364 |
+| high_no_malicious | 1.7820469052912813 | 1.8329053156267037 |
+| low_malicious | 0.04784710962121608 | 0.06480291016578121 |
+| median_reference | 0.4125550483149709 | 1.1753264604049036 |
+
+The initial result records SHAP 0.48.0, 254 internal coalitions, 256 unique masks,
+eight components and seed 0. Runtime dependency lower bounds do not pin those
+versions. `num_samples` is a coalition budget, not total detector cost: temporal
+prefix preparation and snapshot restoration contribute separately. Record actual
+SHAP version/default regularization and environment for comparisons; the seed
+alone does not establish Torch/CUDA determinism.
 
 ## Evidence and limitations
 
@@ -123,8 +162,9 @@ be treated as an interchangeable reference. Existing output files alone do not
 certify every server dependency or database mapping contract.
 
 The explainability pipeline is faithful to the reproduced ORTHRUS instance
-actually executed. The reproduced detector does not establish equivalence
-with the exact published ORTHRUS detector. Do not infer published accuracy from
+actually executed. The reproduced detector does not reproduce the published
+E5-THEIA detector-level baseline and is not an exact reproduction of the detector
+in the paper. Do not infer published accuracy from
 this explanation workflow or replace official evaluation with batch means.
 Upstream also documents Word2Vec reproducibility sensitivity to
 `PYTHONHASHSEED`; preserve the actual environment and preprocessing provenance.

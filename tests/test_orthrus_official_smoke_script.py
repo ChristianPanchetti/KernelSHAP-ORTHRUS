@@ -97,3 +97,20 @@ def test_phase9_cli_uses_perturbative_runtime(tmp_path, monkeypatch, capsys):
     assert smoke_script.main([str(path), "--phase9"]) == 0
     assert calls == [True]
     assert json.loads(capsys.readouterr().out) == {"repeatable": True}
+
+
+@pytest.mark.parametrize("name,graph,batch", [
+    ("initial_validation", 0, 0),
+    ("high_malicious", 40, 0),
+    ("high_no_malicious", 35, 82),
+    ("low_malicious", 98, 39),
+    ("median_reference", 42, 35),
+])
+def test_final_experiment_configuration(project_root, name, graph, batch):
+    path = project_root / "experiments" / "theia_e5" / f"{name}.json"
+    config = smoke_script.build_config(smoke_script.load_config(path))
+    assert config.dataset_name == "THEIA_E5"
+    assert (config.split, config.graph_index, config.batch_index) == ("test", graph, batch)
+    assert config.external_root == Path("/home")
+    assert config.config_path == Path("/home/config/orthrus.yml")
+    assert config.from_weights_path == Path("/home/weights/THEIA_E5.pkl")

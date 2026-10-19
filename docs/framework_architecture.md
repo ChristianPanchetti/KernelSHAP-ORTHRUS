@@ -80,6 +80,13 @@ score relative to that reference; negative SHAP decreases it. Negative SHAP
 does not mean benign behavior. These are component-level feature interventions,
 not causal evidence about original events or independent event attributions.
 
+These interventions act on extracted latent node features, including node-type
+indicators when present; they do not mask raw commands/arguments or rerun
+Word2Vec. All-zero latent features can be outside the training distribution.
+The explanation remains conditional on retained history, which may still carry
+information about the same nodes. Additive reconstruction alone does not prove
+masker plausibility or attribution faithfulness.
+
 The explainer shares a cached scorer across endpoints and coalitions and
 exports expected value, SHAP sum, reconstruction residual, tolerance, seed,
 library version and sampling diagnostics. It reports discrepancies rather

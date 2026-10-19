@@ -3,9 +3,9 @@
 ## External runtime contract
 
 ORTHRUS source is configured through `external_root`; its location is independent
-of this repository. The generic example JSON uses `/path/to/orthrus-source` as
-a placeholder. The five THEIA_E5 configurations describe a server/container
-layout under `/home`; review those paths before use. Relative runtime JSON
+of this repository. The five final JSON configurations under
+`experiments/theia_e5/` describe the verified server/container layout under
+`/home`; review those paths before use. Relative runtime JSON
 paths resolve from the launch directory, not the JSON's parent directory.
 
 Real execution needs the compatible ORTHRUS source and its Python environment,
@@ -146,6 +146,11 @@ t1 = t2 = t3 = t0
 
 This prevents uninitialized timing variables when preprocessing is skipped.
 It affects timing/reporting only and does not alter model training or inference.
+
+The smoke script is retained because the real explanation pipeline, scanner and
+ground-truth exporter import its shared `load_config` and `build_config` helpers.
+Its CLI remains an optional diagnostic interface, not a prerequisite extra run
+before each final explanation.
 
 ## Temporal preparation and scoring
 

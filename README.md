@@ -40,9 +40,9 @@ Real inference additionally requires a compatible external ORTHRUS environment
 with PyTorch/PyG, official YAML, preprocessed artifacts and a complete checkpoint
 containing model weights and neighbor-loader state. Configure `external_root`
 and artifact/checkpoint paths in the runtime JSON. No particular local checkout
-location is required. The generic template is
-`examples/orthrus_official_smoke_config.example.json`; replace its placeholders.
-The THEIA_E5 examples use a recorded Linux `/home` layout, not portable defaults.
+location is required. The five final configurations under
+`experiments/theia_e5/` use the recorded Linux `/home` layout; these are experiment
+records, not portable defaults. The initial case is `initial_validation.json`.
 
 PostgreSQL mapping additionally needs optional `psycopg2` and matching database
 access through existing libpq environment/service settings. Keep credentials
@@ -104,14 +104,15 @@ From the repository root in the configured server environment:
 
 ```bash
 python main.py --mode orthrus --adapter real \
-  --orthrus-config examples/orthrus_theia_e5_real_smoke.json \
+  --orthrus-config experiments/theia_e5/initial_validation.json \
   --grouping-mode node \
   --perturbation-mode neutralize_edges \
   --max-components 8 \
   --num-samples 256 \
   --seed 0 \
   --mapping-backend postgresql \
-  --output outputs/explanation.json
+  --output outputs/theia_e5/explanations/initial_validation/result.json \
+  --log-file outputs/theia_e5/explanations/initial_validation/run.log
 ```
 
 For offline metadata, use `--mapping-backend offline --mapping-rows path/to/rows.json`.
@@ -122,9 +123,10 @@ legacy dummy option; real execution uses `--orthrus-config`.
 
 ```bash
 python main.py --mode orthrus --adapter real \
-  --orthrus-config examples/orthrus_theia_e5_real_smoke.json \
-  --scan-test --scan-output outputs/theia_e5_test_scan.csv \
-  --scan-ground-truth outputs/theia_e5_official_node_ground_truth.json
+  --orthrus-config experiments/theia_e5/initial_validation.json \
+  --scan-test --scan-output outputs/theia_e5/scan/theia_e5_test_scan.csv \
+  --scan-ground-truth outputs/theia_e5/scan/theia_e5_official_node_ground_truth.json \
+  --log-file outputs/theia_e5/scan/theia_e5_test_scan.log
 ```
 
 Scanning verifies checkpoint history and advances through validation and test
@@ -139,8 +141,8 @@ Export official node IDs once in the matching server/database environment:
 
 ```bash
 python scripts/export_scan_ground_truth.py \
-  --orthrus-config examples/orthrus_theia_e5_real_smoke.json \
-  --output outputs/theia_e5_official_node_ground_truth.json
+  --orthrus-config experiments/theia_e5/initial_validation.json \
+  --output outputs/theia_e5/scan/theia_e5_official_node_ground_truth.json
 ```
 
 The exporter calls official `labelling.get_ground_truth(cfg)` without inference
@@ -161,10 +163,16 @@ Use `--output-csv path/to/ranking.csv` for an additional ranking export.
 Regenerate the nine visualization artifacts without inference, SHAP or DB jobs:
 
 ```bash
-python main.py --plot-json outputs/explanation.json
+python main.py --plot-json outputs/theia_e5/explanations/initial_validation/result.json
 ```
 
-Generated results are ignored by Git. Preserve research outputs separately.
+Final artifacts are grouped under `outputs/theia_e5/scan/` and
+`outputs/theia_e5/explanations/<case>/`. Explanation archives contain `result.json`,
+`run.log`, `shap_bar.png/pdf`, `waterfall.png/pdf`, `provenance_subgraph.png/pdf`
+and `summary_table.csv/png/pdf`. Outputs remain ignored by Git; preserve them
+separately. Exporter behavior is unchanged: new plotting writes files prefixed
+by the JSON stem (`result_shap_bar.*`, `result_shap_waterfall.*`, etc.); archived
+figures have the shorter names above.
 
 ## Testing
 
@@ -209,13 +217,13 @@ KSHAP_ORTHRUS/
   preprocessing/  # case loading, mapping and sidecars
   xai/            # SHAP, scanner, export and visualization
   scripts/        # official smoke launcher and ground-truth exporter
-  examples/       # runtime template and THEIA_E5 cases
+  experiments/theia_e5/  # five final configurations
   tests/          # 15 synthetic test files and shared fixtures
   docs/           # three maintained technical guides
   outputs/        # ignored generated results; tracked .gitkeep
   logs_input.json
   requirements.txt, requirements-dev.txt
-  AGENTS.md, LICENSE
+  LICENSE
 ```
 
 ## Documentation
