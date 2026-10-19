@@ -14,7 +14,9 @@ env/
 
 outputs/*
 !outputs/.gitkeep
-*.log
+!outputs/theia_e5/
+!outputs/theia_e5/**/
+!outputs/theia_e5/**
 
 .env
 .env.*

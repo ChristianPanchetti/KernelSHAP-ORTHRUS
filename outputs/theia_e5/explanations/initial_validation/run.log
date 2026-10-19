@@ -1,0 +1,9 @@
+2026-10-07 14:38:06 - KSHAP_ORTHRUS - INFO - ==================================================
+2026-10-07 14:38:06 - KSHAP_ORTHRUS - INFO - PROJECT LOGGING INITIALIZED: KSHAP_ORTHRUS
+2026-10-07 14:38:06 - KSHAP_ORTHRUS - INFO - Log file: outputs/run.log
+2026-10-07 14:38:06 - KSHAP_ORTHRUS - INFO - Console level: INFO, File level: DEBUG
+2026-10-07 14:38:06 - KSHAP_ORTHRUS - INFO - ==================================================
+2026-10-07 14:40:36 - KSHAP_ORTHRUS - INFO - Explaining anomaly score with SHAP KernelExplainer (M=8, nsamples=256)
+2026-10-07 14:40:36 - KSHAP_ORTHRUS - INFO - Baseline score f(0): 0.829613
+2026-10-07 14:40:36 - KSHAP_ORTHRUS - INFO - Original score f(1): 0.717195
+2026-10-07 14:40:42 - KSHAP_ORTHRUS - INFO - Saved results JSON to: outputs/theia_e5_phase11_final.json

@@ -1,0 +1,9 @@
+Rank,Component / semantic name,Node ID,Node type,SHAP value,|SHAP|,Assigned batch edges,Main operations,Main counterpart entities,Mapping status
+1,OTHER (195 source nodes),195 source nodes,node group,-0.3340731748200403,0.3340731748200403,624,"EVENT_CLONE (271), EVENT_OPEN (155), EVENT_READ (149), +4 more","/bin/bash [subject; id=456287] (138), /bin/bash [subject; id=457287] (125), +292 more",aggregate; events: resolved (624)
+2,/usr/sbin/sshd,455696,subject,-0.11599349437662476,0.11599349437662476,41,"EVENT_CLONE (38), EVENT_WRITE (3)","/bin/bash [subject; id=455697] (1), /bin/bash [subject; id=455699] (1), +39 more",resolved; events: resolved (41)
+3,/usr/sbin/sshd,456191,subject,-0.11517875820301626,0.11517875820301626,39,"EVENT_CLONE (36), EVENT_WRITE (3)","/bin/bash [subject; id=456192] (1), /bin/bash [subject; id=456194] (1), +37 more",resolved; events: resolved (39)
+4,/usr/sbin/sshd,455944,subject,-0.11508907764700985,0.11508907764700985,40,"EVENT_CLONE (37), EVENT_WRITE (3)","/bin/bash [subject; id=455945] (1), /bin/bash [subject; id=455947] (1), +38 more",resolved; events: resolved (40)
+5,/bin/run-parts,456060,subject,-0.03954786591794118,0.03954786591794118,104,EVENT_CLONE (104),"/bin/dash [subject; id=456061] (1), /bin/dash [subject; id=456062] (1), +102 more",resolved; events: resolved (104)
+6,/bin/run-parts,455813,subject,-0.03954786494783077,0.03954786494783077,104,EVENT_CLONE (104),"/bin/dash [subject; id=455814] (1), /bin/dash [subject; id=455815] (1), +102 more",resolved; events: resolved (104)
+7,/proc/2/stat,1402493,file,-0.0016774815647921935,0.0016774815647921935,36,"EVENT_OPEN (18), EVENT_READ (18)","/bin/bash [subject; id=456287] (18), /bin/bash [subject; id=457287] (18)",resolved; events: resolved (36)
+8,/proc/3/stat,1402496,file,-0.0016636946126774577,0.0016636946126774577,36,"EVENT_OPEN (18), EVENT_READ (18)","/bin/bash [subject; id=456287] (18), /bin/bash [subject; id=457287] (18)",resolved; events: resolved (36)

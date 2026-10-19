@@ -1,0 +1,179 @@
+{
+  "complete": true,
+  "total_test_batches": 14344,
+  "total_test_edges_scanned": 14605144,
+  "batch_mean_scores": {
+    "min": 0.003384762208952452,
+    "max": 1.7857131806231337,
+    "mean": 0.3474048767413527,
+    "median": 0.41264813533673916,
+    "percentiles": {
+      "p25": 0.0037371572713595924,
+      "p50": 0.41264813533673916,
+      "p75": 0.6949211438477505,
+      "p90": 0.696661047078669,
+      "p95": 0.6999841990629647,
+      "p99": 0.9773277887433307
+    }
+  },
+  "ground_truth": {
+    "dataset": "THEIA_E5",
+    "ground_truth_level": "node",
+    "official_label_function": "labelling.get_ground_truth",
+    "ground_truth_source": "Official ORTHRUS labelling.get_ground_truth(cfg): configured node-label CSVs resolved by the official database UUID lookup",
+    "ground_truth_version": "darpa",
+    "ground_truth_relative_path": [
+      "E5-THEIA/node_THEIA_1_Firefox_Drakon_APT_BinFmt_Elevate_Inject.csv"
+    ],
+    "ground_truth_files": [
+      "/home/Ground_Truth/darpa/darpa/E5-THEIA/node_THEIA_1_Firefox_Drakon_APT_BinFmt_Elevate_Inject.csv"
+    ],
+    "malicious_node_count": 70,
+    "export_path": "/workspace/KSHAP/outputs/theia_e5_official_node_ground_truth.json",
+    "export_sha256": "e722c8ad69fcdd11b7d010758a6c3116e8fab186e697642025865caaf6d90a58",
+    "batch_fields": {
+      "malicious_node_count": "derived from membership in the official node-ID set",
+      "contains_malicious_node": "derived from membership in the official node-ID set",
+      "malicious_src_node_count": "derived from membership in the official node-ID set",
+      "malicious_dst_node_count": "derived from membership in the official node-ID set"
+    },
+    "official_fields": [
+      "node_ids (input export only)"
+    ],
+    "note": "Endpoint membership is descriptive; it is not an official batch label or detection metric",
+    "configured_official_label_files": [
+      "/home/Ground_Truth/darpa/darpa/E5-THEIA/node_THEIA_1_Firefox_Drakon_APT_BinFmt_Elevate_Inject.csv"
+    ]
+  },
+  "warnings": [
+    "Pretrained weights were applied after model_epoch_dir; they replace model weights but not neighbor-loader state"
+  ],
+  "batches_containing_malicious_nodes": 246,
+  "descriptive_groups": {
+    "containing_malicious_nodes": {
+      "batch_count": 246,
+      "batch_mean_scores": {
+        "min": 0.047847110523662195,
+        "max": 1.7857131806231337,
+        "mean": 0.7190451251552646,
+        "median": 0.6960061570862308,
+        "percentiles": {
+          "p25": 0.6665248103140584,
+          "p50": 0.6960061570862308,
+          "p75": 0.7262289599648284,
+          "p90": 0.9274552222163948,
+          "p95": 1.1630663476007612,
+          "p99": 1.5814532948925268
+        }
+      }
+    },
+    "without_malicious_nodes": {
+      "batch_count": 14098,
+      "batch_mean_scores": {
+        "min": 0.003384762208952452,
+        "max": 1.782046912047008,
+        "mean": 0.34092002065468696,
+        "median": 0.3703851026866434,
+        "percentiles": {
+          "p25": 0.003736287661922688,
+          "p50": 0.3703851026866434,
+          "p75": 0.6948839799069901,
+          "p90": 0.6966013417637441,
+          "p95": 0.6988176631595706,
+          "p99": 0.9123057251481468
+        }
+      }
+    }
+  },
+  "suggested_cases": {
+    "highest_mean_score": {
+      "available": true,
+      "selection_reason": "highest_mean_score",
+      "dataset": "THEIA_E5",
+      "split": "test",
+      "graph_index": 40,
+      "batch_index": 0,
+      "global_edge_offset": 19679003,
+      "mean_anomaly_score": 1.7857131806231337,
+      "malicious_node_count": 1,
+      "contains_malicious_node": true,
+      "malicious_src_node_count": 1,
+      "malicious_dst_node_count": 0
+    },
+    "high_score_with_malicious_nodes": {
+      "available": true,
+      "selection_reason": "high_score_with_malicious_nodes",
+      "dataset": "THEIA_E5",
+      "split": "test",
+      "graph_index": 40,
+      "batch_index": 0,
+      "global_edge_offset": 19679003,
+      "mean_anomaly_score": 1.7857131806231337,
+      "malicious_node_count": 1,
+      "contains_malicious_node": true,
+      "malicious_src_node_count": 1,
+      "malicious_dst_node_count": 0
+    },
+    "ordinary_score_without_malicious_nodes": {
+      "available": true,
+      "selection_reason": "ordinary_score_without_malicious_nodes",
+      "dataset": "THEIA_E5",
+      "split": "test",
+      "graph_index": 20,
+      "batch_index": 36,
+      "global_edge_offset": 18352893,
+      "mean_anomaly_score": 0.37051554466774567,
+      "malicious_node_count": 0,
+      "contains_malicious_node": false,
+      "malicious_src_node_count": 0,
+      "malicious_dst_node_count": 0
+    },
+    "high_score_without_malicious_nodes": {
+      "available": true,
+      "selection_reason": "high_score_without_malicious_nodes",
+      "dataset": "THEIA_E5",
+      "split": "test",
+      "graph_index": 35,
+      "batch_index": 82,
+      "global_edge_offset": 19511833,
+      "mean_anomaly_score": 1.782046912047008,
+      "malicious_node_count": 0,
+      "contains_malicious_node": false,
+      "malicious_src_node_count": 0,
+      "malicious_dst_node_count": 0
+    },
+    "low_score_with_malicious_nodes": {
+      "available": true,
+      "selection_reason": "low_score_with_malicious_nodes",
+      "dataset": "THEIA_E5",
+      "split": "test",
+      "graph_index": 98,
+      "batch_index": 39,
+      "global_edge_offset": 25267516,
+      "mean_anomaly_score": 0.047847110523662195,
+      "malicious_node_count": 1,
+      "contains_malicious_node": true,
+      "malicious_src_node_count": 1,
+      "malicious_dst_node_count": 0
+    },
+    "median_score": {
+      "available": true,
+      "selection_reason": "median_score",
+      "dataset": "THEIA_E5",
+      "split": "test",
+      "graph_index": 42,
+      "batch_index": 35,
+      "global_edge_offset": 19811734,
+      "mean_anomaly_score": 0.41255504700529855,
+      "malicious_node_count": 0,
+      "contains_malicious_node": false,
+      "malicious_src_node_count": 0,
+      "malicious_dst_node_count": 0
+    }
+  },
+  "official_orthrus_evaluation": {
+    "computed": false,
+    "reason": "Official evaluation requires validation/test time-window loss artifacts, configured node aggregation and thresholds; batch statistics are insufficient"
+  },
+  "restart_policy": "Restart from verified training checkpoint; CSV is not a temporal-state checkpoint"
+}
