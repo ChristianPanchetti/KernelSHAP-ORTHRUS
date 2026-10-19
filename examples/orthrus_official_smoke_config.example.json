@@ -1,6 +1,6 @@
 {
-  "external_root": "external/orthrus",
-  "config_path": "external/orthrus/config/orthrus.yml",
+  "external_root": "/path/to/orthrus-source",
+  "config_path": "/path/to/orthrus-source/config/orthrus.yml",
   "dataset_name": "REPLACE_WITH_ORTHRUS_DATASET_NAME",
   "model_epoch_dir": "artifacts/REPLACE_WITH_MODEL_PATH/model_epoch_N",
   "split": "test",

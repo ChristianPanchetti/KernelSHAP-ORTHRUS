@@ -1,129 +1,51 @@
-# AGENTS.md
+# Contributor constraints
 
-## Role
+KSHAP_ORTHRUS is functionally complete. Prefer small, focused changes; preserve
+production module paths and supported APIs. Do not redesign stable components
+or expand the project without an explicit task.
 
-You are working on the KSHAP_ORTHRUS thesis project.
+## Implemented contracts
 
-The goal is to build an explainability framework for ORTHRUS-ano using Kernel SHAP.
+- Real inference, Kernel SHAP orchestration, PostgreSQL/offline mapping, scanner,
+  ground-truth export and offline visualizations are implemented.
+- Real explanations use native `TemporalData` inside `OrthrusAlertCase`.
+  `LogDataset` and the dummy adapter remain supported regression/debug tools.
+- Real experiment grouping is source-node based, maximum eight components,
+  with OTHER aggregation. Preserve canonical component/mask insertion order.
+- Neutralization modifies only current `x_src`/`x_dst` occurrences, expanded
+  independently across repeated nodes within the same role. Preserve history,
+  topology, order, cardinality, messages, edge features and current edge targets.
+- Historical neighbor-loader `e_id` values are global history IDs, never local
+  batch row indices. Keep temporal preparation and snapshot/restore behavior.
+- The real adapter validates per-edge losses and returns their scalar mean.
+  Isolated mask evaluations are serial and restore state even after failures.
+- `f(0)` is a neutralized reference state, not a benign baseline. Negative SHAP
+  does not establish benign behavior or causal event attribution.
+- Mapping supports readability, not inference, and happens outside mask scoring.
+  Preserve missing/ambiguous identity and provenance handling. PostgreSQL remains
+  an optional dependency with credentials supplied outside tracked source.
+- Scanning advances state sequentially without SHAP or DB lookup. Ground-truth
+  node membership is descriptive, not an official TP/FP/FN batch label.
+- ORTHRUS source location is configured through `external_root`; do not hardcode
+  a checkout path. Do not modify independent ORTHRUS code without explicit scope.
 
-Always prefer small, safe, testable changes. Do not rewrite working modules unless explicitly requested.
+## Changes and verification
 
-## Main target pipeline
+- Inspect existing behavior before editing. Preserve dummy compatibility.
+- Do not change SHAP, perturbation, temporal-state or scoring semantics unless
+  explicitly requested. Do not remove supported placeholder/compatibility APIs.
+- Use synthetic tests; never require DARPA, checkpoints, PostgreSQL or external
+  services in the portable suite. Run relevant checks after changes and report
+  optional-dependency skips honestly.
+- Real inference, preprocessing, training, scans and database experiments need
+  task authorization; they are not routine cleanup verification.
+- Keep research results and credentials out of commits. Do not delete ignored
+  research outputs or independent checkouts merely because they are ignored.
+- Keep technical documentation in the three maintained guides. Update claims
+  against implementation and distinguish reported server evidence from new runs.
+- Explainability of the reproduced instance does not establish equivalence with
+  the published detector or its accuracy.
 
-The final target pipeline is:
-
-DARPA / ORTHRUS artifacts
-→ TemporalData
-→ OrthrusAlertCase
-→ OrthrusInterpretableBuilder
-→ Kernel SHAP masks
-→ OrthrusPerturbationManager.neutralize_edges
-→ RealOrthrusAnoAdapter
-→ ORTHRUS edge losses
-→ scalar anomaly score
-→ SHAP values
-→ readable explanation.
-
-The project is now moving toward real ORTHRUS inference. Do not spend time implementing unnecessary alternative pipelines unless explicitly requested.
-
-## Architectural rules
-
-- `LogDataset` and `DummyOrthrusAnoAdapter` are legacy/debug mode.
-- Dummy mode must keep working.
-- The final ORTHRUS pipeline must use ORTHRUS `TemporalData`, not `LogDataset`.
-- `OrthrusAlertCase` is the central object for ORTHRUS explanations.
-- SHAP works on interpretable components mapped to edge indices through `component_to_edges`.
-- `neutralize_edges` (also exposed as `mask_edge_features`) is the preferred real-ORTHRUS perturbation strategy because it preserves chronological edge order and global `e_id` alignment.
-- `drop_edges` is retained for debug/synthetic use, non-stateful models, or a future integration that manages global `e_id` explicitly.
-- ORTHRUS inference is expected to return per-edge losses.
-- The adapter must reduce edge losses to one scalar score.
-- Initial scalar reduction should be `mean(edge_losses)` unless explicitly changed.
-- Mapping providers are for explanation readability, not for model inference.
-- `ArtifactOnlyMappingProvider` is a fallback/debug mapping.
-- `SidecarMappingProvider` is useful only if sidecar files exist.
-- `DbAssistedMappingProvider` is future work unless explicitly requested.
-
-## Implementation priorities
-
-Prefer this order:
-
-1. Audit existing code before modifying it.
-2. Keep existing tests passing.
-3. Obtain or generate real ORTHRUS artifacts.
-4. Run the official unperturbed smoke test on real `TemporalData` and a complete checkpoint.
-5. Validate `full_data`, global `e_id`, neighbor-loader state, and device behavior.
-6. Connect the validated runtime to the ORTHRUS Kernel SHAP path.
-7. Improve mapping/export only after real inference works.
-
-Do not prioritize:
-- extra mapping strategies;
-- visualization;
-- advanced reporting;
-- CSV/JSONL sidecar variants;
-- real Postgres integration;
-- GraphAssistedMappingProvider;
-- complex export formats.
-
-## Coding rules
-
-- Make minimal focused changes.
-- Do not modify Kernel SHAP core logic unless explicitly requested.
-- Do not modify external ORTHRUS code unless strictly necessary.
-- Do not require DARPA, Postgres, or real ORTHRUS artifacts in unit tests.
-- Use synthetic tests where possible.
-- Do not introduce hard dependencies on Postgres.
-- Preserve backward compatibility unless explicitly told otherwise.
-- If a task is ambiguous, inspect the code and explain the safest option before implementing.
-- If an interrupted previous implementation exists, audit it first and complete only missing parts.
-
-## Testing rules
-
-Before final response, run relevant tests.
-
-Prefer:
-1. targeted tests for changed files;
-2. then full `pytest -q` if feasible.
-
-Add tests for any new behavior.
-
-Tests must not require:
-- DARPA real dataset;
-- Postgres;
-- real ORTHRUS checkpoint;
-- external services.
-
-## ORTHRUS-specific cautions
-
-Be careful with:
-- `TemporalData` required fields;
-- `src`, `dst`, `t`, `msg`;
-- optional `edge_type`, `edge_index`, `x_src`, `x_dst`, `edge_feats`;
-- `full_data`;
-- `e_id`;
-- neighbor loaders / temporal loaders;
-- shape alignment after edge dropping.
-
-Never assume that perturbing the local batch is enough until compatibility with `full_data` and `e_id` has been checked.
-
-`RealOrthrusAnoAdapter`, the generic runtime, the official cfg-driven runtime, and the smoke-test CLI are implemented and synthetically tested. The next practical block is obtaining or generating real ORTHRUS artifacts and running the official unperturbed smoke test. Kernel SHAP end-to-end in ORTHRUS mode is still future work.
-
-## Sidecar and mapping
-
-The sidecar format, if used, maps TemporalData edge indices to original event metadata:
-
-```json
-{
-  "mapping_mode": "sidecar-assisted",
-  "join_strategy": "edge_index",
-  "edges": {
-    "0": {
-      "event_uuid": "...",
-      "src_index_id": 123,
-      "dst_index_id": 456,
-      "timestamp_rec": 123456789,
-      "operation": "EVENT_EXECUTE",
-      "raw_metadata": {}
-    }
-  }
-}
-```
+See [architecture](docs/framework_architecture.md),
+[integration](docs/orthrus_integration.md) and
+[experimental procedure](docs/experimental_pipeline.md).

@@ -30,8 +30,8 @@ class OrthrusInterpretableBuilder:
     - `time_chunk`: group by time sub-window within the TemporalData window
 
     The resulting mapping is stored in `OrthrusAlertCase.component_to_edges`.
-    Integration with the real ORTHRUS end-to-end pipeline remains future work,
-    but this builder itself is implemented and covered by synthetic tests.
+    The real explanation pipeline uses source-node grouping with up to eight
+    components, including OTHER when aggregation is needed.
     """
 
     def __init__(

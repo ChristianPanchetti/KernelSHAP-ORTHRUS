@@ -3,7 +3,7 @@ from __future__ import annotations
 import abc
 from collections import Counter
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, Optional
 
 from preprocessing.orthrus_alert_case import OrthrusAlertCase
 from preprocessing.orthrus_join_keys import (

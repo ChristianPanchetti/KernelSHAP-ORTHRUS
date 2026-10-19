@@ -8,7 +8,9 @@ import numpy as np
 import pytest
 
 import pipeline
-from config import AppConfig, KernelSHAPConfig, PerturbationConfig
+from config import AppConfig, KernelSHAPConfig, LoggingConfig, PerturbationConfig
+from pathlib import Path
+from pipeline import run_kernel_shap_pipeline
 from preprocessing.orthrus_alert_case import OrthrusAlertCase
 from preprocessing.orthrus_mapping import DbAssistedMappingProvider
 from perturbation.orthrus_interpretable_builder import OrthrusInterpretableBuilder
@@ -229,3 +231,31 @@ def test_cli_mode_defaults_and_explicit_legacy_options(tmp_path, monkeypatch):
     legacy = build_config_from_args(parse_args())
     assert legacy.adapter_type == "dummy" and legacy.perturbation.max_components == 50
     assert legacy.perturbation.grouping_mode == "exec_path"
+
+
+def test_pipeline_mode_adapter_mismatch_is_caught_early(tmp_path: Path, default_input_path: Path):
+    cfg = AppConfig(
+        input_path=default_input_path,
+        output_json_path=tmp_path / "out.json",
+        adapter_type="real",
+        pipeline_mode="dummy",
+        shap=KernelSHAPConfig(num_samples=10, seed=0, top_k=3),
+        perturbation=PerturbationConfig(),
+        logging=LoggingConfig(level="INFO", log_file=None),
+    )
+
+    with pytest.raises(ValueError, match="pipeline_mode"):
+        run_kernel_shap_pipeline(cfg, logging.getLogger("test"))
+
+
+def test_cli_rejects_legacy_input_for_real_mode(tmp_path, project_root, default_input_path):
+    import subprocess
+
+    proc = subprocess.run(
+        [sys.executable, "main.py", "--mode", "orthrus", "--adapter", "real",
+         "--input", str(default_input_path), "--output", str(tmp_path / "out.json")],
+        cwd=project_root, capture_output=True, text=True,
+    )
+    assert proc.returncode != 0
+    assert "--input and --time-window-seconds are legacy options" in proc.stdout + proc.stderr
+    assert not (tmp_path / "out.json").exists()

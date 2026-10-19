@@ -19,7 +19,7 @@ class OrthrusAlertCase:
     IMPORTANT:
     - `temporal_data` and `full_data` are typed as `Any` on purpose.
       This avoids introducing hard runtime dependencies on `torch`/`torch_geometric`
-      while we are still scaffolding the integration.
+      for synthetic tests and offline tooling.
     - The dummy/debug pipeline continues to use `LogDataset` directly.
 
     Field semantics (expected, but not enforced yet):

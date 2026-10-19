@@ -9,7 +9,6 @@ import pytest
 
 from adapters.orthrus_ano_adapter import RealOrthrusAnoAdapter
 from adapters.orthrus_runtime import _iter_official_temporal_batches, OrthrusRuntimeError
-from preprocessing.orthrus_alert_case import OrthrusAlertCase
 from xai.orthrus_test_scanner import scan_batches, load_ground_truth, suggested_cases, score_statistics
 
 

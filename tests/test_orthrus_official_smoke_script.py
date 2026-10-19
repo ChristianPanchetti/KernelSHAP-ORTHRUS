@@ -12,8 +12,8 @@ from scripts import run_orthrus_official_smoke as smoke_script
 
 def valid_payload() -> dict:
     return {
-        "external_root": "external/orthrus",
-        "config_path": "external/orthrus/config/orthrus.yml",
+        "external_root": "/path/to/orthrus-source",
+        "config_path": "/path/to/orthrus-source/config/orthrus.yml",
         "dataset_name": "THEIA_E3",
         "model_epoch_dir": "artifacts/models/model_epoch_1",
         "split": "test",
@@ -32,7 +32,7 @@ def test_json_is_read_and_official_config_is_built(tmp_path: Path):
     config = smoke_script.build_config(smoke_script.load_config(path))
 
     assert isinstance(config, OrthrusOfficialRuntimeConfig)
-    assert config.external_root == Path("external/orthrus")
+    assert config.external_root == Path("/path/to/orthrus-source")
     assert config.dataset_name == "THEIA_E3"
     assert config.graph_index == 2
     assert config.batch_index == 3

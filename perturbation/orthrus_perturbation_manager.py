@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Sequence, Set
+from typing import Any, List, Sequence, Set
 
 import numpy as np
 
@@ -25,8 +25,9 @@ class OrthrusPerturbationResult:
 class OrthrusPerturbationManager:
     """ORTHRUS-specific perturbation manager.
 
-    This manager perturbs an `OrthrusAlertCase` by dropping interpretable
-    components, which correspond to groups of edges.
+    Real explanations neutralize current x_src/x_dst occurrences per node role
+    while preserving history, targets and topology. Edge dropping remains
+    available for synthetic/debug inputs and non-stateful models.
     """
 
     def __init__(self, original: OrthrusAlertCase, mode: str = "drop_edges"):
@@ -69,22 +70,12 @@ class OrthrusPerturbationManager:
         """
         Filters the alert case by dropping edges based on a component mask.
 
-        Decision (TASK 4): Edge Indexing Strategy
-        -----------------------------------------
-        We adopt Option B: Original edge indices are preserved.
+        Synthetic/debug strategy only: slice local edge-aligned fields while
+        retaining original node IDs and mapping keys. The shared full_data is
+        unchanged. component_to_edges retains the original edge positions.
 
-        - The `temporal_data` object is modified by slicing all edge-aligned
-          fields (src, dst, t, msg, etc.) to remove the dropped edges.
-        - The `edge_index` is reconstructed from the sliced `src` and `dst`,
-          but it still contains the original node IDs.
-        - All mapping dictionaries (`edge_to_event_uuid`, `component_to_edges`, etc.)
-          in the new `OrthrusAlertCase` are filtered to only contain entries
-          related to the kept edges. They still use original edge indices.
-
-        This is the safest approach for ORTHRUS inference, as the model receives
-        a valid subgraph with original node identifiers. It also simplifies the
-        explainer's logic, as the mapping from a component to its original edges
-        remains stable.
+        Dropping local edges does not preserve temporal neighbor-loader e_id
+        alignment and must not be used as the real temporal SHAP intervention.
         """
         original_case = self.original
         component_ids = list(original_case.component_to_edges.keys())

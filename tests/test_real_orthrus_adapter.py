@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import logging
+
 import pytest
 
-from adapters.orthrus_ano_adapter import RealOrthrusAnoAdapter
+from adapters.orthrus_ano_adapter import DummyOrthrusAnoAdapter, RealOrthrusAnoAdapter
 from preprocessing.orthrus_alert_case import OrthrusAlertCase
 
 
@@ -250,3 +252,22 @@ def test_mask_scoring_requires_explicit_isolation():
         adapter.score_mask(None, [1])
     with pytest.raises(ValueError, match="neighbor loader"):
         RealOrthrusAnoAdapter(FakeModel([1]), isolate_state=True)
+
+
+def test_orthrus_scaffolding_imports():
+    # These imports should stay torch/pyg-free.
+    from perturbation.orthrus_interpretable_builder import OrthrusInterpretableBuilder  # noqa: F401
+    from perturbation.orthrus_perturbation_manager import OrthrusPerturbationManager  # noqa: F401
+
+
+def test_real_adapter_requires_injected_model():
+    with pytest.raises(ValueError, match="constructed model"):
+        RealOrthrusAnoAdapter(model=None, logger=logging.getLogger("test"))
+
+
+def test_dummy_adapter_rejects_orthrus_case():
+    adapter = DummyOrthrusAnoAdapter(seed=0, logger=logging.getLogger("test"))
+    case = OrthrusAlertCase(temporal_data=object())
+
+    with pytest.raises(TypeError):
+        adapter.predict_anomaly_score(case)

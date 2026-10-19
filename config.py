@@ -50,13 +50,13 @@ class AppConfig:
     pipeline_mode: str = "dummy"  # dummy | orthrus
 
     # Pipeline parameters
-    device: str = "cpu"  # kept for future integration (e.g., torch model)
+    device: str = "cpu"  # Real inference uses the device in the official runtime JSON.
 
     shap: KernelSHAPConfig = field(default_factory=KernelSHAPConfig)
     perturbation: PerturbationConfig = field(default_factory=PerturbationConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
-    # Official runtime JSON already used by the phase-9 launcher.
+    # Official runtime JSON shared by explanation, smoke and scanner entry points.
     orthrus_config_path: Optional[Path] = None
     mapping_backend: str = "postgresql"  # postgresql (libpq environment) | offline
     mapping_rows_path: Optional[Path] = None  # offline JSON: events + nodes

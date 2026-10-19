@@ -43,10 +43,9 @@ class PlaceholderOrthrusAnoAdapter(OrthrusAnoAdapter):
 
     def __init__(self, message: Optional[str] = None):
         self._message = message or (
-            "ORTHRUS-ano is not integrated yet. "
-            "Implement a concrete adapter by loading the real model/code and "
-            "calling it inside predict_anomaly_score(...) -> float. "
-            "For the real ORTHRUS/DARPA pipeline this will typically accept an OrthrusAlertCase."
+            "The placeholder adapter does not perform inference. "
+            "Select the real adapter with a configured ORTHRUS runtime, or use "
+            "the dummy adapter for LogDataset debug inputs."
         )
 
     def predict_anomaly_score(self, input_object: Any) -> float:
