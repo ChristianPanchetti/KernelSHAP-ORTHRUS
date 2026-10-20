@@ -169,9 +169,10 @@ python main.py --plot-json outputs/theia_e5/explanations/initial_validation/resu
 Final artifacts are grouped under `outputs/theia_e5/scan/` and
 `outputs/theia_e5/explanations/<case>/`. Explanation archives contain `result.json`,
 `run.log`, `shap_bar.png/pdf`, `waterfall.png/pdf`, `provenance_subgraph.png/pdf`
-and `summary_table.csv/png/pdf`. Outputs remain ignored by Git; preserve them
-separately. Exporter behavior is unchanged: new plotting writes files prefixed
-by the JSON stem (`result_shap_bar.*`, `result_shap_waterfall.*`, etc.); archived
+and `summary_table.csv/png/pdf`. The final THEIA_E5 evidence is tracked in Git;
+other generated outputs remain ignored. Exporter behavior is unchanged: new
+plotting writes files prefixed by the JSON stem (`result_shap_bar.*`,
+`result_shap_waterfall.*`, etc.); archived
 figures have the shorter names above.
 
 ## Testing
@@ -220,7 +221,8 @@ KSHAP_ORTHRUS/
   experiments/theia_e5/  # five final configurations
   tests/          # 15 synthetic test files and shared fixtures
   docs/           # three maintained technical guides
-  outputs/        # ignored generated results; tracked .gitkeep
+  outputs/theia_e5/  # tracked final scan and five explanations
+  report/         # standalone English LaTeX report and required figures
   logs_input.json
   requirements.txt, requirements-dev.txt
   LICENSE
@@ -231,5 +233,17 @@ KSHAP_ORTHRUS/
 - [Framework architecture](docs/framework_architecture.md)
 - [ORTHRUS integration](docs/orthrus_integration.md)
 - [Experimental procedure and reproducibility](docs/experimental_pipeline.md)
+- [English project report](report/report.tex)
+
+The English report is self-contained apart from its required `report/figures/`
+resources. Compile it twice with a working LaTeX installation:
+
+```bash
+cd report
+pdflatex -interaction=nonstopmode -halt-on-error report.tex
+pdflatex -interaction=nonstopmode -halt-on-error report.tex
+```
+
+Compilation uses saved figures and requires no detector or experimental jobs.
 
 Licensed under MIT; see `LICENSE`.

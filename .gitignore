@@ -39,3 +39,24 @@ external/
 .idea/
 .DS_Store
 Thumbs.db
+
+# LaTeX build artifacts (keep archived experimental logs and report figures).
+*.aux
+*.toc
+*.out
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.synctex(busy)
+*.lof
+*.lot
+*.bbl
+*.blg
+*.bcf
+*.run.xml
+*.nav
+*.snm
+*.vrb
+/report/*.log
+/report/*.pdf
+/report/build*/

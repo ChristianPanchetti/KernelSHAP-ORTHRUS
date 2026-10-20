@@ -1,0 +1,23 @@
+% Labels are defined by report.tex.
+\begin{tikzpicture}[
+  box/.style={draw,rounded corners,align=center,text width=6.1cm,
+              minimum height=8mm,font=\small,fill=blue!4},
+  flow/.style={-{Latex[length=2mm]},thick},
+  node distance=5mm]
+\node[box] (runtime) {\ArchRuntime};
+\node[box,below=of runtime] (builder) {\ArchBuilder};
+\node[box,below=of builder] (mask) {\ArchMask};
+\node[box,below=of mask] (adapter) {\ArchAdapter};
+\node[box,below=of adapter] (shap) {Kernel SHAP};
+\node[box,below=of shap] (output) {\ArchOutput};
+\node[draw,rounded corners,align=center,text width=3.0cm,font=\small,
+      right=12mm of output,fill=gray!8] (db) {\ArchDB};
+\draw[flow] (runtime)--(builder);
+\draw[flow] (builder)--(mask);
+\draw[flow] (mask)--(adapter);
+\draw[flow] (adapter)--(shap);
+\draw[flow] (shap)--(output);
+\draw[flow,dashed] (db)--node[above,font=\scriptsize]{\ArchLabels}(output);
+\draw[flow,dashed] (shap.east)--++(9mm,0)|-
+  node[pos=.75,right,font=\scriptsize]{\ArchCoalitions}(mask.east);
+\end{tikzpicture}
